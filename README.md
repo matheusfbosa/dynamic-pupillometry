@@ -1,2 +1,2 @@
-# dynamic_pupillometry
+# Dynamic Pupillometry
 Trabalho de Conclusão de Curso - Engenharia Elétrica UFPR
