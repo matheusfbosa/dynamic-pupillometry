@@ -1,14 +1,16 @@
 import os
 import streamlit as st
 
-from pupillometry import Pupillometry
+from app.pupillometry import Pupillometry
 
 
 def main():
-    with open(os.path.join('styles', 'style.css')) as f:
+    st.sidebar.image(os.path.join(os.path.dirname(__file__), 'img', 'profile.jpg'), use_column_width=True)
+
+    with open(os.path.join(os.path.dirname(__file__), 'styles', 'style.css')) as f:
         st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
 
-    st.sidebar.title('Pupilometria Dinâmica')    
+    st.sidebar.title('aaPupilometria Dinâmica')    
     st.sidebar.info('Aplicação que realiza pupilometria dinâmica.')
 
     pupillometry = Pupillometry(st)
@@ -32,7 +34,7 @@ def main():
 
 def about():
     st.sidebar.title('Sobre')    
-    st.sidebar.image(os.path.join('img', 'matheus_bosa.jpg'), use_column_width=True)
+    st.sidebar.image(os.path.join(os.path.dirname(__file__), 'img', 'profile.jpg'), use_column_width=True)
     st.sidebar.info(
         '''
         Desenvolvido por **Matheus Bosa** como requisito para avaliação em TE105 Projeto de Graduação
