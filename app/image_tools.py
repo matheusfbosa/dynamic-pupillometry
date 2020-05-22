@@ -1,17 +1,23 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import numpy as np
-
 from skimage import io
 from skimage import img_as_float, img_as_ubyte
+
+from skimage.morphology import square, disk
+
+from skimage.filters import gaussian as gaussian_filter
+from skimage.filters.rank import mean as mean_filter, median as median_filter
+
+from skimage.exposure import equalize_hist
+
 from skimage.draw import circle
-from skimage.morphology import square 
 
 
 class ImageTools:
 
-    def __init__(self):
+    def __init__(self, np):
+        self.np = np
         sns.set_style('ticks')
 
     def get_image(self, img_bytes):
@@ -20,32 +26,24 @@ class ImageTools:
     def show_image(self, img):
         plt.imshow(img, cmap='gray')
 
-    def show_all_images(self, *images, titles=None, cmap='gray'):
-        # TODO: Refact
-        images = [img_as_float(image) for image in images]
-
-        if titles is None:
-            titles = [''] * len(images)
-
-        vmin = min(map(np.min, images))
-        vmax = max(map(np.max, images))
-        ncols = len(images)
-        height = 6
-        width = height * len(images)
-        fig, axes = plt.subplots(nrows=1, ncols=ncols,
-                                figsize=(width, height))
-        
+    def show_all_images(self, images, titles=None):
+        fig, axes = plt.subplots(nrows=2, ncols=2)
+        fig.tight_layout()
         for ax, img, label in zip(axes.ravel(), images, titles):
-            ax.imshow(img, vmin=vmin, vmax=vmax, cmap='gray')
+            ax.imshow(img, cmap='gray')
             ax.set_title(label)
 
-    def get_selem(width):
+    def get_selem(self, width):
         return square(width)
 
-    def generate_histograms():
-        pass
+    def filtering(self, image, selem, sigma):
+        image_mean = mean_filter(img_as_ubyte(image), selem)
+        image_median = median_filter(img_as_ubyte(image), selem)
+        image_gauss = gaussian_filter(image, sigma)
+        image_eq_hist = equalize_hist(image)
+        return [image_mean, image_median, image_gauss, image_eq_hist]
 
-    def __change_value_neighborhood(img, pixel, L):
+    def __change_value_neighborhood(self, img, pixel, L):
         r, c = pixel[0], pixel[1]
         
         # Acha as coordenadas de um círculo de raio L centrado em (x, y)
@@ -57,11 +55,11 @@ class ImageTools:
         # Substitui o pixel e seus vizinhos pelo novo valor
         img[r_coords, c_coords] = new_value
 
-    def __mean_value_neighborhood(img, pixel):
+    def __mean_value_neighborhood(self, img, pixel):
         r, c = pixel[0], pixel[1]
-        return np.mean([img[r, c], img[r+1, c], img[r-1, c], img[r, c+1], img[r, c-1]])
+        return self.np.mean([img[r, c], img[r+1, c], img[r-1, c], img[r, c+1], img[r, c-1]])
 
-    def remove_flashes(img, L=6, k=1.5):
+    def remove_flashes(self, img, L=6, k=1.5):
         print('Removendo reflexos especulares...')
     
         lim_min, lim_row_max, lim_col_max, = L+1, img.shape[0]-L-1, img.shape[1]-L-1

@@ -1,19 +1,17 @@
 import os
 import streamlit as st
 
-from app.pupillometry import Pupillometry
+from pupillometry import Pupillometry
 
 
 def main():
-    st.sidebar.image(os.path.join(os.path.dirname(__file__), 'img', 'profile.jpg'), use_column_width=True)
-
     with open(os.path.join(os.path.dirname(__file__), 'styles', 'style.css')) as f:
         st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
 
-    st.sidebar.title('aaPupilometria Dinâmica')    
+    st.sidebar.title('Pupilometria Dinâmica')
     st.sidebar.info('Aplicação que realiza pupilometria dinâmica.')
 
-    pupillometry = Pupillometry(st)
+    pupillometry = Pupillometry(st, os)
 
     if st.sidebar.checkbox('Carregar imagem'):
         pupillometry.load_image()
