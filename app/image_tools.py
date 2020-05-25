@@ -36,50 +36,60 @@ class ImageTools:
     def get_selem(self, width):
         return square(width)
 
-    def filtering(self, image, selem, sigma):
-        image_mean = mean_filter(img_as_ubyte(image), selem)
-        image_median = median_filter(img_as_ubyte(image), selem)
-        image_gauss = gaussian_filter(image, sigma)
-        image_eq_hist = equalize_hist(image)
-        return [image_mean, image_median, image_gauss, image_eq_hist]
+    def get_filtered_images(self, image, selem, sigma):
+        filtered_images = dict()
+        filtered_images['Média'] = self.filter_image('Média', image, selem, sigma)
+        filtered_images['Mediana'] = self.filter_image('Mediana', image, selem, sigma)
+        filtered_images['Gaussiano'] = self.filter_image('Gaussiano', image, selem, sigma)
+        filtered_images['Equalização de Histograma'] = self.filter_image('Equalização de Histograma', image, selem, sigma)
+        return filtered_images
 
-    def __change_value_neighborhood(self, img, pixel, L):
-        r, c = pixel[0], pixel[1]
-        
-        # Acha as coordenadas de um círculo de raio L centrado em (x, y)
-        r_coords, c_coords = circle(r, c, L, img.shape)
+    def filter_image(self, type_filter, image, selem, sigma):
+        if type_filter == 'Média':
+            return mean_filter(img_as_ubyte(image), selem)
+        elif type_filter == 'Mediana':
+            return median_filter(img_as_ubyte(image), selem)
+        elif type_filter == 'Gaussiano':
+            return gaussian_filter(image, sigma)
+        elif type_filter == 'Equalização de Histograma':
+            return equalize_hist(image)
+        raise ValueError('Invalid type of filter!')
 
-        # Calcula o valor mínimo entre todos os pixel localizados a uma distância menor que L 
-        new_value = img[r_coords, c_coords].min()
-
-        # Substitui o pixel e seus vizinhos pelo novo valor
-        img[r_coords, c_coords] = new_value
-
-    def __mean_value_neighborhood(self, img, pixel):
-        r, c = pixel[0], pixel[1]
-        return self.np.mean([img[r, c], img[r+1, c], img[r-1, c], img[r, c+1], img[r, c-1]])
-
-    def remove_flashes(self, img, L=6, k=1.5):
+    def remove_flashes(self, image, L=6, k=1.5):
         print('Removendo reflexos especulares...')
     
-        lim_min, lim_row_max, lim_col_max, = L+1, img.shape[0]-L-1, img.shape[1]-L-1
+        lim_min, lim_row_max, lim_col_max, = L+1, image.shape[0]-L-1, image.shape[1]-L-1
 
         # Para cada pixel (x, y)
         for r in range(lim_min, lim_row_max):
             for c in range(lim_min, lim_col_max):
                 # Calcula o valor médio entre o pixel e sua 4-vizinhança
-                v0 = __mean_value_neighborhood(img, pixel=(r, c))
+                v0 = self.__mean_value_neighborhood(image, pixel=(r, c))
                 
                 # Calcula o valor médio dos pixels L distantes
-                vr = __mean_value_neighborhood(img, pixel=(r+L, c))
-                vl = __mean_value_neighborhood(img, pixel=(r-L, c))
-                vu = __mean_value_neighborhood(img, pixel=(r, c+L))
-                vd = __mean_value_neighborhood(img, pixel=(r, c-L))
+                vr = self.__mean_value_neighborhood(image, pixel=(r+L, c))
+                vl = self.__mean_value_neighborhood(image, pixel=(r-L, c))
+                vu = self.__mean_value_neighborhood(image, pixel=(r, c+L))
+                vd = self.__mean_value_neighborhood(image, pixel=(r, c-L))
 
                 # Verifica se pixel está próximo ao centro do artefato a ser removido
                 change_pixel = (v0 > vr*k) and (v0 > vl*k) and (vu > vr*k) and (vd > vr*k)
                 if change_pixel:
                     print('Artefato no pixel:', (r, c))
-                    __change_value_neighborhood(img, (r, c), L)
+                    self.__change_value_neighborhood(image, (r, c), L)
+
+    def __mean_value_neighborhood(self, image, pixel):
+        r, c = pixel[0], pixel[1]
+        return self.np.mean([image[r, c], image[r+1, c], image[r-1, c], image[r, c+1], image[r, c-1]])
+
+    def __change_value_neighborhood(self, image, pixel, L):
+        r, c = pixel[0], pixel[1]
         
-        return img
+        # Acha as coordenadas de um círculo de raio L centrado em (x, y)
+        r_coords, c_coords = circle(r, c, L, image.shape)
+
+        # Calcula o valor mínimo entre todos os pixel localizados a uma distância menor que L 
+        new_value = image[r_coords, c_coords].min()
+
+        # Substitui o pixel e seus vizinhos pelo novo valor
+        image[r_coords, c_coords] = new_value

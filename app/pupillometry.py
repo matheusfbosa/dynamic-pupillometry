@@ -10,6 +10,7 @@ class Pupillometry:
         self.st = st
         self.os = os
         self.image_in = None
+        self.image_pre_processed = None
         self.image_tools = ImageTools(np)
 
     def load_image(self):
@@ -43,40 +44,46 @@ class Pupillometry:
 
         if self.st.checkbox('Filtragem'):
             self.st.text('Filtragem')
-            
+
             width = self.st.slider('Largura do elemento estruturante quadrado', min_value=1, max_value=20, value=3)
             selem = self.image_tools.get_selem(width)
             self.st.write(selem)
             sigma = self.st.slider('Valor do desvio padrão σ do kernel gaussiano', min_value=.1, max_value=5., value=1.)
             
-            images_plot = self.image_tools.filtering(self.image_in, selem, sigma)
-            self.image_tools.show_all_images(images_plot, 
-                                             titles=['Média', 'Mediana', 'Gaussiano', 'Equalização de Histograma'])
-            self.st.pyplot()
-
-            type_of_filter = self.st.selectbox('Selecione o filtro com melhor resultado:',
-                                               ['Média', 'Mediana', 'Gaussiano', 'Equalização de Histograma'])
-
+            if self.st.button('Filtrar'):
+                self.__filtering(selem, sigma)
+            
         if self.st.checkbox('Remover reflexos na imagem'):
-            __remove_flashes(img)    
+            if self.image_pre_processed:
+                self.__remove_flashes(self.image_pre_processed, selem, sigma)
+            else:
+                self.image_pre_processed = self.image_in.copy()
+                self.__remove_flashes(self.image_pre_processed, selem, sigma)
 
-    def __filtering(self, selem):
-        image_show_all(original, mean, median, gaussian, 
-                    titles=['Original', 'Média', 'Mediana', 'Gaussiano']);
+    def __filtering(self, selem, sigma):
+        images_plot = self.image_tools.get_filtered_images(self.image_in, selem, sigma)
+
+        self.image_tools.show_all_images(images_plot.values(), 
+                                         titles=images_plot.keys())
+        self.st.pyplot()
+
+        type_of_filter = self.st.selectbox('Selecione o filtro com melhor resultado:',
+                                           ['Média', 'Mediana', 'Gaussiano', 'Equalização de Histograma'])
+
+        self.image_pre_processed = images_plot.get(type_of_filter)
         
-        type_of_filter = st.selectbox('Selecione o tipo de filtro:', ['Média', 'Mediana', 'Gaussiano', 'Equalização de Histograma'])
-        
-    def __remove_flashes(self, img):
-        flashes_removed = img.copy()
+    def __remove_flashes(self, image, selem, sigma):
+        image_flashes_removed = image.copy()
 
-        # L e k definidos empiricamente
-        L = 12
-        k = 1.3
-        self.image_tools.remove_flashes(flashes_removed, L, k)
-        flashes_removed_final = median_filter(img_as_ubyte(flashes_removed), square(L))
+        L = self.st.slider('Valor do parâmetro L', min_value=1, max_value=50, value=12)
+        k = self.st.slider('Valor do parâmetro k', min_value=1.1, max_value=5., value=1.3)
 
-        image_show_all(original, flashes_removed, flashes_removed_final, 
-                    titles=['Original', 'Processada', 'Processada e filtrada']);
+        if self.st.button('Remover Reflexos'):
+            self.image_tools.remove_flashes(image_flashes_removed, L, k)
+            image_flashes_removed_blurred = self.image_tools.filter_image('Mediana', image_flashes_removed, selem, sigma)
+
+            self.image_tools.show_all_images([image, image_flashes_removed, image_flashes_removed_blurred], 
+                                         titles=['Antes', 'Depois', 'Suavizada'])
 
     def pupil_segmentation(self):
         self.st.subheader('Segmentação da pupila')
