@@ -2,10 +2,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import numpy as np
+import imagehash
+from PIL import Image
 
 from skimage import io
 from skimage import img_as_float, img_as_ubyte
-
 from skimage.color import label2rgb
 from skimage.draw import disk as draw_disk, circle_perimeter
 from skimage.exposure import equalize_hist
@@ -13,6 +14,7 @@ from skimage.feature import canny
 from skimage.filters import gaussian as gaussian_filter, threshold_otsu
 from skimage.filters import sobel, sobel_v, sobel_h
 from skimage.filters import scharr, scharr_v, scharr_h
+from skimage.filters import prewitt, prewitt_v, prewitt_h
 from skimage.filters.rank import mean as mean_filter, median as median_filter
 from skimage.measure import regionprops, label as measure_label
 from skimage.morphology import square, disk
@@ -25,6 +27,7 @@ class Pupillometry:
 
 
     def __init__(self):
+        self.images_in = dict()
         self.image_in = None
         self.image_filtered = None
         self.image_pre_processed = None
@@ -36,9 +39,9 @@ class Pupillometry:
         self.images_to_plot_highlight = None
         self.region_pupil = None
         self.region_iris = None
-        self.artifacts_found = []
+        self.artifacts_found = list()
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
-        self.highlight_filters = ['Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
+        self.highlight_filters = ['Prewitt horizontal', 'Prewitt vertical', 'Prewitt', 'Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
         self.morphological_operators = ['Erosão', 'Dilatação', 'Abertura', 'Fechamento']
         sns.set_style('ticks')
 
@@ -62,11 +65,19 @@ class Pupillometry:
 
 
     def get_image(self, image_bytes):
-        self.image_in = io.imread(image_bytes, as_gray=True, plugin='pil')
+        return io.imread(image_bytes, as_gray=True, plugin='pil')
 
 
     def get_image_as_float(self, image):
         return img_as_float(image)
+
+
+    def get_image_as_ubyte(self, image):
+        return img_as_ubyte(image)
+
+
+    def get_perceptual_hash(self, image):
+        return imagehash.whash(Image.open(image))
 
 
     def label_to_rgb(self, image_labels, image):
@@ -79,10 +90,10 @@ class Pupillometry:
 
     def show_image_and_histogram(self, image, image_bin, n_bins):
         fig = plt.figure()
-        a = fig.add_subplot(1, 2, 1)
-        imgplot = plt.hist(image.ravel(), bins=n_bins)
-        a = fig.add_subplot(1, 2, 2)
-        imgplot = plt.imshow(image_bin, cmap='gray')
+        fig.add_subplot(1, 2, 1)
+        plt.hist(image.ravel(), bins=n_bins)
+        fig.add_subplot(1, 2, 2)
+        plt.imshow(image_bin, cmap='gray')
 
 
     def show_all_images(self, images, nrows, ncols, titles=None, cmap='gray'):
@@ -134,6 +145,12 @@ class Pupillometry:
             return equalize_hist(image)
 
         # Filtros de realce
+        elif type_of_function == 'Prewitt horizontal':
+            return prewitt_h(image)
+        elif type_of_function == 'Prewitt vertical':
+            return prewitt_v(image)
+        elif type_of_function == 'Prewitt':
+            return prewitt(image)
         elif type_of_function == 'Sobel horizontal':
             return sobel_h(image)
         elif type_of_function == 'Sobel vertical':
@@ -209,10 +226,6 @@ class Pupillometry:
 
     def get_regionprops(self, image_labels):
         return regionprops(image_labels)
-
-
-    def calculate_radius(self, area):
-        return np.sqrt(area / np.pi)
 
 
     def get_otsu_threshold(self, image):

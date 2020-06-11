@@ -21,7 +21,7 @@ def main():
 
     st.sidebar.title('Pupilometria Dinâmica')
     st.title('Pupilometria Dinâmica :o:')
-    st.sidebar.info('Aplicação que realiza pupilometria dinâmica em imagens.')
+    st.sidebar.info('Aplicação que realiza a segmentação das regiões da pupila e íris em imagens de pupilometria dinâmica.')
 
     pup = get_pupillometry()
 
@@ -30,14 +30,15 @@ def main():
     mode = st.sidebar.radio('Modo de execução:', ('Completo', 'Passo a passo'))
 
     if mode == 'Completo':
-        if st.button('Segmentar pupila e íris'):
-            run()
-
+        if len(pup.images_in) > 0:
+            if st.button('Segmentar pupila e íris'):
+                run()
+            
     elif mode == 'Passo a passo':
         st.sidebar.markdown('Etapas:')
 
         if st.sidebar.checkbox('Pré-Processamento'):
-            if pup.image_in is not None:
+            if len(pup.images_in) > 0:
                 pre_processing()
             else:
                 st.warning('Por favor, execute a etapa de carregamento de imagem antes de proceder.')
@@ -63,66 +64,68 @@ def main():
     about()
 
 
-@st.cache(allow_output_mutation=True)
-def get_static_store() -> Dict:
-    return {}
-
-
 def multiple_files_uploader():
-    static_store = get_static_store()
+    image_bytes = st.file_uploader('Upload de imagens:', type=['jpg', 'png'])
+    if image_bytes:
+        # Gera hash da imagem para verificações
+        hashfile = pup.get_perceptual_hash(image_bytes)
 
-    result = st.file_uploader('Upload de imagens:', type=['jpg', 'png'])
-    if result:
-        # Processamento do arquivo
-        value = result.getvalue()
-
-        # Adicionando ao dicionário com os arquivos caso já não esteja incluído
-        if not value in static_store.values():
-            static_store[result] = value
+        # Adiciona imagem ao dicionário caso hash já não seja uma chave
+        if not hashfile in pup.images_in.keys():
+            pup.images_in[hashfile] = pup.get_image(image_bytes)
     else:
-        static_store.clear() # Limpa dicionário caso usuário limpe cache e recarregue página
+        pup.images_in.clear() # Limpa dicionário caso usuário limpe cache e recarregue página
         st.info('Realize o upload de uma ou mais imagens do tipo .jpg ou .png.')
 
-    if st.button('Limpar lista de imagens'):
-        static_store.clear()
-    if st.checkbox('Mostrar lista de imagens', True):
-        st.write(list(static_store.keys()))
-    #if st.checkbox('Mostrar conteúdo das imagens'):
-        #for value in static_store.values():
-            #st.code(value)
+    if len(pup.images_in.keys()) > 0: 
+        if st.button('Limpar lista de imagens'):
+            pup.images_in.clear()
+        if st.checkbox('Mostrar lista de imagens', True):
+            for index, hashfile in enumerate(pup.images_in.keys()):
+                st.text(str(index+1) + ' - hash ' + str(hashfile))
+                if st.checkbox('Mostrar imagem ' + str(index+1)):
+                    image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.images_in.get(hashfile))
+                    pup.show_image(image_pre_processed_ubyte)
+                    st.pyplot()
 
+                    df = pd.DataFrame(
+                        index=['Tamanho', 'Valor mínimo', 'Valor máximo'],
+                        columns=['Valor'],
+                        data=pup.get_np_array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()])
+                    )
+                    st.table(df)
+    
 
 def load_image():
     st.subheader(':open_file_folder: Carregar imagem')
 
-    option_image = st.radio('Selecione:', ('Realizar upload de uma imagem', 'Realizar upload de várias imagens', 'Utilizar uma imagem de exemplo'))
+    option_image = st.radio('Selecione:', ('Realizar upload de imagens', 'Utilizar imagem de exemplo'))
 
-    if option_image == 'Realizar upload de uma imagem':
-        image_bytes = st.file_uploader(label='Faça o upload da imagem de pupilometria (.jpg ou .png):', 
-                                       type=['jpg', 'png'])
-        if image_bytes:
-            pup.get_image(image_bytes)
-
-    if option_image == 'Realizar upload de várias imagens':
+    if option_image == 'Realizar upload de imagens':
         multiple_files_uploader()
 
-    elif option_image == 'Utilizar uma imagem de exemplo':
+    elif option_image == 'Utilizar imagem de exemplo':
         filenames = os.listdir(os.path.join(os.path.dirname(__file__), 'images'))
         filename_selected = st.selectbox('Selecione:', tuple(filenames))
         fname = os.path.join(os.path.dirname(__file__), 'images', filename_selected)
-        pup.get_image(fname)
+        hashfile = pup.get_perceptual_hash(fname)
 
-    if pup.image_in is not None:
-        if st.checkbox('Mostrar imagem'):
-            pup.show_image(pup.image_in)
-            st.pyplot()
+        if not hashfile in pup.images_in.keys():
+            pup.images_in.clear()
+            pup.images_in[hashfile] = pup.get_image(fname)
 
-            df = pd.DataFrame(
-                index=['Tamanho', 'Valor mínimo', 'Valor máximo'],
-                columns=['Valor'],
-                data=pup.get_np_array([pup.image_in.shape, round(pup.image_in.min(), 3), round(pup.image_in.max(), 3)])
-            )
-            st.table(df)
+        if pup.images_in is not None:
+            if st.checkbox('Mostrar imagem'):
+                image_pre_processed_ubyte = pup.get_image_as_ubyte(next(iter(pup.images_in.values())))
+                pup.show_image(image_pre_processed_ubyte)
+                st.pyplot()
+
+                df = pd.DataFrame(
+                    index=['Tamanho', 'Valor mínimo', 'Valor máximo'],
+                    columns=['Valor'],
+                    data=pup.get_np_array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()])
+                )
+                st.table(df)
     
 
 def run():
@@ -148,7 +151,7 @@ def run():
     regions = pup.get_regionprops(image_labels)
     region = max(regions, key=lambda item: item.area)
     row_pupil, col_pupil = map(int, region.centroid)
-    radius_pupil = int(round(pup.calculate_radius(area=region.area)))
+    radius_pupil = region.equivalent_diameter // 2
     pup.region_pupil = (row_pupil, col_pupil, radius_pupil)
     pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
 
@@ -191,7 +194,7 @@ def pre_processing():
         if pup.image_filtered is not None:
             image_flash_parameters = os.path.join(os.path.dirname(__file__), 'flash_parameters.png')
             image_flash_example = os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg')
-            st.image(image=[image_flash_example, image_flash_parameters], caption=['Reflexos em imagem', 'Parâmetros L e k'], width=300)
+            st.image(image=[image_flash_example, image_flash_parameters], caption=['Reflexos numa imagem.', 'Parâmetros L e k.'], width=300)
             #image_flash_parameters = pup.get_image(os.path.join(os.path.dirname(__file__), 'flash_parameters.png'))
             #image_flash_example = pup.get_image(os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg'))
             #pup.show_all_images([image_flash_parameters, image_flash_example], nrows=1, ncols=2, titles=['Reflexos em imagem', 'Parâmetros L e k'])
@@ -261,13 +264,15 @@ def pupil_segmentation():
 
 def pupil_segment_global_binarization():
     n_bins = st.slider('Número de bins do histograma:', min_value=0, max_value=100, value=15)
-    hist, bins = pup.get_histogram(image=pup.image_pre_processed, n_bins=n_bins)
+
+    image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.image_pre_processed)
+    hist, bins = pup.get_histogram(image=image_pre_processed_ubyte, n_bins=n_bins)
     thresh = int(round(bins[1]))
     
-    image_bin = pup.get_image_as_float(pup.image_pre_processed < thresh)
+    image_bin = pup.get_image_as_float(image_pre_processed_ubyte < thresh)
 
     st.text('Valor do limiar de binarização: ' + str(thresh))
-    pup.show_image_and_histogram(image=pup.image_pre_processed, image_bin=image_bin, n_bins=n_bins)
+    pup.show_image_and_histogram(image=image_pre_processed_ubyte, image_bin=image_bin, n_bins=n_bins)
     st.pyplot()
 
     st.markdown(':pushpin: Morfologia matemática binária')
@@ -297,7 +302,8 @@ def pupil_segment_global_binarization():
         regions = pup.get_regionprops(image_labels)
         region = max(regions, key=lambda item: item.area)
         row_pupil, col_pupil = map(int, region.centroid)
-        radius_pupil = int(round(pup.calculate_radius(area=region.area)))
+        radius_pupil = region.equivalent_diameter // 2
+        #min_row, min_col, max_row, max_col = region.bbox
 
         pup.region_pupil = (row_pupil, col_pupil, radius_pupil)
 
