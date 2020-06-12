@@ -28,36 +28,60 @@ class Pupillometry:
 
     def __init__(self):
         self.images_in = dict()
-        self.image_in = None
-        self.image_filtered = None
+        self.image_processing = None
+        self.image_filtered_blur = None
         self.image_pre_processed = None
         self.image_pupil = None
+        self.image_filtered_high = None
         self.image_iris = None
         self.image_out = None
         self.images_to_plot_blur = None
         self.images_to_plot_morph = None
-        self.images_to_plot_highlight = None
+        self.images_to_plot_high = None
         self.region_pupil = None
+        self.bbox_pupil = None
         self.region_iris = None
-        self.artifacts_found = list()
+        self.bbox_iris = None
+        self.artifacts_found = []
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
-        self.highlight_filters = ['Prewitt horizontal', 'Prewitt vertical', 'Prewitt', 'Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
-        self.morphological_operators = ['Erosão', 'Dilatação', 'Abertura', 'Fechamento']
+        self.high_filters = ['Prewitt horizontal', 'Prewitt vertical', 'Prewitt', 'Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
+        self.morph_operators = ['Erosão', 'Dilatação', 'Abertura', 'Fechamento']
+        self.config = {
+            'pre_proc_filter_width': 5,
+            'pre_proc_filter_sigma': 1.,
+            'pre_proc_filter_type': 'Equalização de histograma',
+            'pre_proc_flash_l': 6,
+            'pre_proc_flash_k': 1.5,
+            'pre_proc_flash_width': 7,
+            'seg_pup_method': 'Binarização global',
+            'seg_pup_bin_nbins': 15,
+            'seg_pup_bin_width': 11,
+            'seg_pup_morph_type': 'Fechamento',
+            'seg_pup_hough_sigma': 1.,
+            'seg_pup_hough_lthresh': 50,
+            'seg_pup_hough_hthresh': 120,
+            'seg_pup_hough_opthresh': 'Manual',
+            'seg_iris_filter_width': 5,
+            'seg_iris_filter_type': 'Scharr vertical' 
+        }
         sns.set_style('ticks')
 
 
     def reset(self):
-        self.image_filtered = None
+        self.image_filtered_blur = None
         self.image_pre_processed = None
         self.image_pupil = None
+        self.image_filtered_high = None
         self.image_iris = None
         self.image_out = None
         self.images_to_plot_blur = None
         self.images_to_plot_morph = None
-        self.images_to_plot_highlight = None
+        self.images_to_plot_high = None
         self.region_pupil = None
+        self.bbox_pupil = None
         self.region_iris = None
-        self.artifacts_found = []
+        self.bbox_iris = None
+        self.artifacts_found = list()
 
 
     def get_np_array(self, array):
@@ -121,14 +145,14 @@ class Pupillometry:
     
     def get_images_morphologically_transformed(self, selem, image):
         images_morph = dict()
-        for type_of_operation in self.morphological_operators:
+        for type_of_operation in self.morph_operators:
             images_morph[type_of_operation] = self.transform_image(image, selem, None, type_of_operation)
         return images_morph
 
     
-    def get_highlight_filtered_images(self, selem, image):
+    def get_high_filtered_images(self, selem, image):
         images_filtered = dict()
-        for type_of_filter in self.highlight_filters:
+        for type_of_filter in self.high_filters:
             images_filtered[type_of_filter] = self.transform_image(image, selem, None, type_of_filter)
         return images_filtered
 
@@ -254,12 +278,12 @@ class Pupillometry:
         return image
 
 
-    def iris_segmentation_horizontal_gradient(self, image, a=20, b=120):
-        # offset_col = col_pupil + radius_pupil + a
-        offset_col = self.region_pupil[1] + self.region_pupil[2] + a
-        gradient_col = np.gradient(image[self.region_pupil[0], offset_col:(offset_col + b)])
+    def iris_segmentation_horizontal_gradient(self, image, offset_col_low, offset_col_high):
+        # col_pos = col_pupil + radius_pupil + offset_col_high
+        col_pos = self.region_pupil[1] + self.region_pupil[2] + offset_col_low
+        col_gradient = np.gradient(image[self.region_pupil[0], col_pos:(col_pos + offset_col_high)])
 
-        col_edge = np.argmax(gradient_col) + offset_col
+        col_edge = np.argmax(col_gradient) + col_pos
         rad = col_edge - self.region_pupil[0]
 
         # region = row, column, radius
