@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import numpy as np
+import pandas as pd
 import imagehash
 from PIL import Image
 
@@ -27,25 +28,13 @@ class Pupillometry:
 
 
     def __init__(self):
-        self.images_in = dict()
-        self.image_processing = None
-        self.image_filtered_blur = None
-        self.image_pre_processed = None
-        self.image_pupil = None
-        self.image_filtered_high = None
-        self.image_iris = None
-        self.image_out = None
-        self.images_to_plot_blur = None
-        self.images_to_plot_morph = None
-        self.images_to_plot_high = None
-        self.region_pupil = None
-        self.bbox_pupil = None
-        self.region_iris = None
-        self.bbox_iris = None
-        self.artifacts_found = []
+        # Constantes
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
         self.high_filters = ['Prewitt horizontal', 'Prewitt vertical', 'Prewitt', 'Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
         self.morph_operators = ['Erosão', 'Dilatação', 'Abertura', 'Fechamento']
+        
+        # Configuração
+        sns.set_style('ticks')
         self.config = {
             'pre_proc_filter_width': 5,
             'pre_proc_filter_sigma': 1.,
@@ -58,22 +47,43 @@ class Pupillometry:
             'seg_pup_bin_width': 11,
             'seg_pup_morph_type': 'Fechamento',
             'seg_pup_hough_sigma': 1.,
+            'seg_pup_hough_opthresh': 'Manual',
             'seg_pup_hough_lthresh': 50,
             'seg_pup_hough_hthresh': 120,
-            'seg_pup_hough_opthresh': 'Manual',
             'seg_iris_filter_width': 5,
             'seg_iris_filter_type': 'Scharr vertical' 
         }
-        sns.set_style('ticks')
+        self.config_translator = {
+            'pre_proc_filter_width': 'Filtragem de Suavização - Largura do elementro estruturante',
+            'pre_proc_filter_sigma': 'Filtragem de Suavização - Desvio padrão σ gaussiano',
+            'pre_proc_filter_type': 'Filtragem de Suavização - Método de filtragem',
+            'pre_proc_flash_l': 'Tratamento de Reflexos - Parâmetro L',
+            'pre_proc_flash_k': 'Tratamento de Reflexos - Parâmetro k',
+            'pre_proc_flash_width': 'Tratamento de Reflexos - Largura do elemento estruturante',
+            'seg_pup_method': 'Segmentação da Pupila - Método',
+            'seg_pup_bin_nbins': 'Binarização Global - Número de bins',
+            'seg_pup_bin_width': 'Binarização Global - Largura do elemento estruturante',
+            'seg_pup_morph_type': 'Morfologia Binária Matemática - Operador',
+            'seg_pup_hough_sigma': 'Filtro de Canny - Desvio padrão σ gaussiano',
+            'seg_pup_hough_opthresh': 'Configuração Limiar - Manual ou Otsu',
+            'seg_pup_hough_lthresh': 'Filtro de Canny - Limiar inferior',
+            'seg_pup_hough_hthresh': 'Filtro de Canny - Limiar inferior',
+            'seg_iris_filter_width': 'Filtragem de Realce - Largura do elementro estruturant',
+            'seg_iris_filter_type': 'Filtragem de Realce - Método de filtragem' 
+        }
 
-
-    def reset(self):
+        # Estado
+        self.images_to_process = dict()
+        self.images_hash_processed = list()
+        self.radius_pupil_iris = list()
+        self.artifacts_found = list()
+        self.image_processing = None
         self.image_filtered_blur = None
         self.image_pre_processed = None
         self.image_pupil = None
         self.image_filtered_high = None
         self.image_iris = None
-        self.image_out = None
+        self.image_processed = None
         self.images_to_plot_blur = None
         self.images_to_plot_morph = None
         self.images_to_plot_high = None
@@ -81,11 +91,31 @@ class Pupillometry:
         self.bbox_pupil = None
         self.region_iris = None
         self.bbox_iris = None
+
+
+    def reset(self):
         self.artifacts_found = list()
+        self.image_processing = None
+        self.image_filtered_blur = None
+        self.image_pre_processed = None
+        self.image_pupil = None
+        self.image_filtered_high = None
+        self.image_iris = None
+        self.image_processed = None
+        self.images_to_plot_blur = None
+        self.images_to_plot_morph = None
+        self.images_to_plot_high = None
+        self.region_pupil = None
+        self.bbox_pupil = None
+        self.region_iris = None
+        self.bbox_iris = None
 
 
-    def get_np_array(self, array):
-        return np.array(array)
+    def get_summary_config(self):
+        return pd.DataFrame(
+            columns=['Valor'],
+            index=[self.config_translator[i] for i in list(self.config.keys())],
+            data=np.array(list(self.config.values())))
 
 
     def get_image(self, image_bytes):
@@ -110,6 +140,17 @@ class Pupillometry:
 
     def show_image(self, image, cmap='gray'):
         plt.imshow(image, cmap)
+
+
+    def show_image_and_summary_table(self, image, cmap='gray'):
+        plt.imshow(image, cmap)
+        image_pre_processed_ubyte = self.get_image_as_ubyte(image)
+        self.show_image(image_pre_processed_ubyte)
+
+        return pd.DataFrame(
+            columns=['Valor'],
+            index=['Dimensão (linhas, colunas)', 'Valor mínimo de intensidade', 'Valor máximo de intensidade'],
+            data=np.array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()]))
 
 
     def show_image_and_histogram(self, image, image_bin, n_bins):
@@ -272,6 +313,10 @@ class Pupillometry:
         return region
 
 
+    def get_bounding_box(self, region):
+        return region[0] - region[2], region[1] - region[2], region[0] + region[2], region[1] + region[2]
+
+
     def draw_circle_perimeter(self, image, region):
         r_coords_pupil, c_coords_pupil = circle_perimeter(region[0], region[1], region[2], shape=image.shape)
         image[r_coords_pupil, c_coords_pupil] = 1
@@ -289,3 +334,21 @@ class Pupillometry:
         # region = row, column, radius
         region = (self.region_pupil[0], self.region_pupil[1], rad)
         return region
+
+
+    def get_chart_data(self):
+        print(np.array(self.radius_pupil_iris))
+        chart_data = pd.DataFrame(
+            columns=['Raio pupila (pixels)', 'Raio íris (pixels)'],
+            data=np.array(self.radius_pupil_iris))
+        return chart_data
+
+
+    def get_df_results(self):
+        return pd.DataFrame(
+            columns=['Valor'],
+            index=['Pupila - Centro (linha, coluna)', 'Pupila - Raio (pixels)', 'Íris - Centro (linha, coluna)', 'Íris - Raio (pixels)'],
+            data=np.array([
+                '(' + str(self.region_pupil[0]) + ', ' + str(self.region_pupil[1]) + ')', self.region_pupil[2],
+                '(' + str(self.region_iris[0]) + ', ' + str(self.region_iris[1]) + ')', self.region_iris[2]
+            ]))

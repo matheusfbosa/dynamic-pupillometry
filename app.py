@@ -1,7 +1,6 @@
 import streamlit as st
 import os
-import pandas as pd
-from typing import Dict
+import time
 
 from pupillometry import Pupillometry
 
@@ -21,7 +20,8 @@ pup = get_pupillometry()
 
 
 def main():
-    with open(os.path.join(os.path.dirname(__file__), 'styles.css')) as f:
+    # Carrega arquivo CSS com estilos
+    with open(os.path.join(os.path.dirname(__file__), 'resources', 'styles.css')) as f:
         st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
 
     st.sidebar.title('Pupilometria Dinâmica')
@@ -35,10 +35,22 @@ def main():
     mode = st.sidebar.radio('Modo de execução:', ('Completo', 'Configuração'))
 
     if mode == 'Completo':
-        if len(pup.images_in) > 0:
-            if st.button('Segmentar pupila e íris'):
-                run()
-            
+        if len(pup.images_to_process) > 0:
+            if st.checkbox('Mostrar configuração'):
+                st.subheader(':mag_right: Configuração')
+                st.write(pup.get_summary_config())
+
+            if st.checkbox('Segmentar pupila e íris'):
+                st.info('Processando frame ' + str(len(pup.images_hash_processed)+1) + ' de ' + str(len(pup.images_to_process)))
+                for hashfile, image in pup.images_to_process.items():
+                    if hashfile not in pup.images_hash_processed:
+                        pup.image_processing = image
+                        run_all_steps()
+                        pup.images_hash_processed.append(hashfile)
+                plot_radius_chart()
+            else:
+                pup.images_hash_processed = list()
+
     elif mode == 'Configuração':
         st.sidebar.markdown('Etapas:')
 
@@ -69,38 +81,6 @@ def main():
     about()
 
 
-def multiple_files_uploader():
-    image_bytes = st.file_uploader('Upload de imagens:', type=['jpg', 'png'])
-    if image_bytes:
-        # Gera hash da imagem para verificações
-        hashfile = pup.get_perceptual_hash(image_bytes)
-
-        # Adiciona imagem ao dicionário caso hash já não seja uma chave
-        if not hashfile in pup.images_in.keys():
-            pup.images_in[hashfile] = pup.get_image(image_bytes)
-    else:
-        pup.images_in.clear() # Limpa dicionário caso usuário limpe cache e recarregue página
-        st.info('Realize o upload de uma ou mais imagens do tipo .jpg ou .png.')
-
-    if len(pup.images_in.keys()) > 0: 
-        if st.button('Limpar lista de imagens'):
-            pup.images_in.clear()
-        if st.checkbox('Mostrar lista de imagens', True):
-            for index, hashfile in enumerate(pup.images_in.keys()):
-                st.text(str(index+1) + ' - hash ' + str(hashfile))
-                if st.checkbox('Mostrar imagem ' + str(index+1)):
-                    image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.images_in.get(hashfile))
-                    pup.show_image(image_pre_processed_ubyte)
-                    st.pyplot()
-
-                    df = pd.DataFrame(
-                        index=['Tamanho', 'Valor mínimo', 'Valor máximo'],
-                        columns=['Valor'],
-                        data=pup.get_np_array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()])
-                    )
-                    st.table(df)
-    
-
 def load_image():
     st.subheader(':open_file_folder: Carregar imagem')
 
@@ -109,9 +89,9 @@ def load_image():
     if option_image == 'Realizar upload de imagens':
         multiple_files_uploader()
 
-        if len(pup.images_in) > 0:
-            hashfile = st.selectbox('Selecione uma das imagens carregadas:', tuple(pup.images_in.keys()))
-            pup.image_processing = pup.images_in.get(hashfile)
+        if len(pup.images_to_process) > 0:
+            hashfile = st.selectbox('Selecione uma das imagens carregadas:', tuple(pup.images_to_process.keys()))
+            pup.image_processing = pup.images_to_process.get(hashfile)
         else:
             st.warning('Selecione uma das imagens carregadas antes de proceder.')
 
@@ -121,57 +101,119 @@ def load_image():
         fname = os.path.join(os.path.dirname(__file__), 'images', filename_selected)
         hashfile = pup.get_perceptual_hash(fname)
 
-        if not hashfile in pup.images_in.keys():
-            pup.images_in.clear()
-            pup.images_in[hashfile] = pup.get_image(fname)
-            pup.image_processing = pup.images_in.get(hashfile)
+        if not hashfile in pup.images_to_process.keys():
+            pup.images_to_process.clear()
+            pup.images_to_process[hashfile] = pup.get_image(fname)
+            pup.image_processing = pup.images_to_process.get(hashfile)
 
         if pup.image_processing is not None:
             if st.checkbox('Mostrar imagem'):
-                image_pre_processed_ubyte = pup.get_image_as_ubyte(next(iter(pup.images_in.values())))
-                pup.show_image(image_pre_processed_ubyte)
+                df = pup.show_image_and_summary_table(image=pup.get_image_as_ubyte(next(iter(pup.images_to_process.values()))))
                 st.pyplot()
-
-                df = pd.DataFrame(
-                    index=['Tamanho', 'Valor mínimo', 'Valor máximo'],
-                    columns=['Valor'],
-                    data=pup.get_np_array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()])
-                )
                 st.table(df)
     
 
-def run():
-    # Pré-Processamento
-    type_of_blur_filter = 'Equalização de histograma'
-    width_pre = 5
-    L = 12
-    k = 1.3
+def multiple_files_uploader():
+    image_bytes = st.file_uploader('Upload de imagens:', type=['jpg', 'png'])
+    if image_bytes:
+        # Gera hash da imagem para verificações
+        hashfile = pup.get_perceptual_hash(image_bytes)
 
-    pup.image_filtered_blur = pup.transform_image(image=pup.image_processing, selem=pup.get_selem(width_pre), sigma=None, type_of_function=type_of_blur_filter)
-    pup.image_pre_processed, pup.artifacts_found = __handle_flashes(L, k, pup.get_selem(width_pre))
+        # Adiciona imagem ao dicionário caso hash já não seja uma chave
+        if not hashfile in pup.images_to_process.keys():
+            pup.images_to_process[hashfile] = pup.get_image(image_bytes)
+    else:
+        # Limpa dicionário caso usuário limpe cache e recarregue página
+        pup.images_to_process.clear()
+        st.info('Realize o upload de uma ou mais imagens do tipo .jpg ou .png.')
 
-    # Segmentação da pupila
-    n_bins = 15
-    width_morph = 11
-    type_of_morph_operator = 'Fechamento'
+    if len(pup.images_to_process.keys()) > 0: 
+        if st.button('Limpar lista de imagens'):
+            pup.images_to_process.clear()
+        if st.checkbox('Mostrar lista de imagens', True):
+            for index, hashfile in enumerate(pup.images_to_process.keys()):
+                st.text(str(index+1) + ' - hash ' + str(hashfile))
+                if st.checkbox('Mostrar imagem ' + str(index+1)):
+                    df = pup.show_image_and_summary_table(image=pup.images_to_process.get(hashfile))
+                    st.pyplot()
+                    st.table(df)
 
-    _, bins = pup.get_histogram(image=pup.image_pre_processed, n_bins=n_bins)
-    thresh = int(round(bins[1]))
-    image_bin = pup.get_image_as_float(pup.image_pre_processed < thresh)
-    image_morph = pup.transform_image(image=image_bin, selem=pup.get_selem(width_morph), sigma=None, type_of_function=type_of_morph_operator)
-    image_labels, _ = pup.labelizer_image(image=image_morph)
-    regions = pup.get_regionprops(image_labels)
-    region = max(regions, key=lambda item: item.area)
-    row_pupil, col_pupil = map(int, region.centroid)
-    radius_pupil = region.equivalent_diameter // 2
-    pup.region_pupil = (row_pupil, col_pupil, radius_pupil)
-    pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
 
-    # Segmentação da íris
-    pup.region_iris = __iris_segmentation_horizontal_gradient()
-    pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
+def run_all_steps():
+    start_time = time.time()
 
-    # Resultados
+    # ---> Pré-Processamento <----
+    # Filtragem de suavização
+    selem_blur_filter = pup.get_selem(pup.config['pre_proc_filter_width'])
+    pup.image_filtered_blur = pup.transform_image(image=pup.image_processing.copy(), 
+                                    selem=selem_blur_filter, 
+                                    sigma=pup.config['pre_proc_filter_sigma'],
+                                    type_of_function=pup.config['pre_proc_filter_type'])
+
+    # Tratamento de reflexos 
+    st.info('Tratando reflexos. Isso pode demorar um pouco...')
+    pup.image_pre_processed, pup.artifacts_found = __handle_flashes(L=pup.config['pre_proc_flash_l'], 
+                                                        k=pup.config['pre_proc_flash_k'], 
+                                                        selem=selem_blur_filter)
+    if len(pup.artifacts_found) > 0:
+        st.success('Reflexos encontrados e tratados em: ' + str(pup.artifacts_found).strip('[]') + '.')
+
+    # ---> Segmentação da pupila <----
+    image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.image_pre_processed)
+
+    if pup.config['seg_pup_method'] == 'Binarização global':
+        # Histograma
+        _, bins = pup.get_histogram(image=image_pre_processed_ubyte, n_bins=pup.config['seg_pup_bin_nbins'])
+        thresh = int(round(bins[1]))
+        st.text('Valor do limiar de binarização: ' + str(thresh))
+        image_bin = pup.get_image_as_float(image_pre_processed_ubyte < thresh)
+
+        # Morfologia matemática
+        image_morph = pup.transform_image(image=image_bin.copy(),
+                                    selem=pup.get_selem(pup.config['seg_pup_bin_width']),
+                                    sigma=None,
+                                    type_of_function=pup.config['seg_pup_morph_type'])
+        image_labels, n_labels = pup.labelizer_image(image=image_morph)
+        st.text('Número de regiões encontradas: ' + str(n_labels))
+
+        # Localização da pupila
+        regions = pup.get_regionprops(image_labels)
+        region = max(regions, key=lambda item: item.area)
+        row_pupil, col_pupil = map(int, region.centroid)
+        radius_pupil = int(region.equivalent_diameter // 2)
+        pup.region_pupil = (row_pupil, col_pupil, radius_pupil)
+        pup.bbox_pupil = region.bbox
+        
+    elif pup.config['seg_pup_method'] == 'Detecção de bordas e transformada circular de Hough':
+        image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
+        
+        st.info('Aplicando transformada de Hough...')
+        pup.region_pupil = __circle_hough_transform(image_edges)
+        pup.bbox_pupil = pup.get_bounding_box(region=pup.region_pupil)
+        st.success('Busca por circunferências na imagem foi encerrada.')
+
+    elif pup.config['seg_pup_method'] == 'Projeções horizontal e vertical':
+        pass
+
+    #if pup.region_pupil is not None:
+        #pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
+
+    # ---> Segmentação da íris <----
+    pup.image_filtered_high = pup.transform_image(image=pup.image_pre_processed.copy(),
+                                selem=pup.get_selem(pup.config['seg_pup_bin_width']),
+                                sigma=None,
+                                type_of_function=pup.config['seg_iris_filter_type'])
+    st.info('Buscando pela região de fronteira entre íris e esclera..')
+    pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high)
+    pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
+    st.success('Busca encerrada.')
+
+    #if pup.region_iris is not None:
+        #pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
+
+    st.text('Tempo de processamento do frame: ' + str(round(time.time() - start_time, 3)) + ' segundos.')
+
+    # ---> Resultados <----
     results()
 
 
@@ -204,10 +246,10 @@ def pre_processing():
         
     if st.checkbox('Tratamento de reflexos'):
         if pup.image_filtered_blur is not None:
-            image_flash_parameters = os.path.join(os.path.dirname(__file__), 'flash_parameters.png')
+            image_flash_parameters = os.path.join(os.path.dirname(__file__), 'resources', 'flash_parameters.png')
             image_flash_example = os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg')
             st.image(image=[image_flash_example, image_flash_parameters], caption=['Reflexos especulares numa imagem.', 'Parâmetros L e k.'], width=300)
-            #image_flash_parameters = pup.get_image(os.path.join(os.path.dirname(__file__), 'flash_parameters.png'))
+            #image_flash_parameters = pup.get_image(os.path.join(os.path.dirname(__file__), 'resources', 'flash_parameters.png'))
             #image_flash_example = pup.get_image(os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg'))
             #pup.show_all_images([image_flash_parameters, image_flash_example], nrows=1, ncols=2, titles=['Reflexos especulares numa imagem', 'Parâmetros L e k'])
             #st.pyplot()
@@ -239,15 +281,14 @@ def pre_processing():
 
 @st.cache(suppress_st_warning=True)
 def __images_to_plot_blur_filtering(selem, sigma):
-    return pup.get_blur_filtered_images(selem, sigma, image=pup.image_processing)
+    return pup.get_blur_filtered_images(selem, sigma, image=pup.image_processing.copy())
 
 
 @st.cache(suppress_st_warning=True)
 def __handle_flashes(L, k, selem):
-    image = pup.image_filtered_blur.copy()
-    artifacts = pup.handle_flashes(L, k, image)
-    pup.image_pre_processed = pup.transform_image(image, selem=selem, sigma=None, type_of_function='Mediana')
-    return artifacts
+    image_handle_flashes, artifacts = pup.handle_flashes(L, k, pup.image_filtered_blur.copy())
+    image_pre_processed = pup.transform_image(image_handle_flashes, selem=selem, sigma=None, type_of_function='Mediana')
+    return image_pre_processed, artifacts
 
 
 def pupil_segmentation():
@@ -312,7 +353,7 @@ def pupil_segment_global_binarization():
     
         image_labels, n_labels = pup.labelizer_image(image=image_morph)
 
-        st.write('Número de regiões encontradas: ' + str(n_labels))
+        st.text('Número de regiões encontradas: ' + str(n_labels))
         if st.checkbox('Mostrar imagem com rótulos'):
             image_labels_colored = pup.label_to_rgb(image_labels, image=pup.image_pre_processed)
             pup.show_image(image_labels_colored)
@@ -354,7 +395,7 @@ def pupil_segment_canny_hough():
         st.text('Limiar inferior: ' + str(round(pup.config['seg_pup_hough_lthresh'], 3)) + ' (0,5 * Otsu)')
         st.text('Limiar superior: ' + str(round(pup.config['seg_pup_hough_hthresh'], 3)) + ' (Otsu)')
 
-    st.info('Buscando por bordas...')
+    st.info('Buscando por bordas na imagem...')
     image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
     st.success('Busca encerrada.')
     pup.show_image(image_edges)
@@ -363,6 +404,7 @@ def pupil_segment_canny_hough():
     st.markdown(':pushpin: Transformada circular de Hough')
     st.info('Buscando por circunferências...')
     pup.region_pupil = __circle_hough_transform(image_edges)
+    pup.bbox_pupil = pup.get_bounding_box(region=pup.region_pupil)
     st.success('Busca encerrada.')
 
 
@@ -399,7 +441,7 @@ def iris_segmentation():
         if pup.image_filtered_high is not None:
             st.info('Buscando pela região de fronteira entre íris e esclera..')
             pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high)
-            pup.bbox_iris = pup.region_iris[0] - pup.region_iris[2], pup.region_iris[1] - pup.region_iris[2], pup.region_iris[0] + pup.region_iris[2], pup.region_iris[1] + pup.region_iris[2]
+            pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
             st.success('Busca encerrada.')
         
             if pup.region_iris is not None:
@@ -425,7 +467,7 @@ def iris_segmentation():
 
 @st.cache(suppress_st_warning=True)
 def __images_to_plot_high_filtering(selem):
-    return pup.get_high_filtered_images(selem, image=pup.image_pupil)
+    return pup.get_high_filtered_images(selem, image=pup.image_pre_processed.copy())
 
 
 def __iris_segmentation_horizontal_gradient(image):
@@ -435,27 +477,29 @@ def __iris_segmentation_horizontal_gradient(image):
 def results():
     st.subheader(':bar_chart: Resultados')
 
-    df = pd.DataFrame(
-        index=['Pupila - Posição (x, y)', 'Pupila - Raio (pixels)', 'Íris - Posição (x, y)', 'Íris - Raio (pixels)'],
-        columns=['Valor'],
-        data=pup.get_np_array([
-            '(' + str(pup.region_pupil[0]) + ', ' + str(pup.region_pupil[1]) + ')', pup.region_pupil[2],
-            '(' + str(pup.region_iris[0]) + ', ' + str(pup.region_iris[1]) + ')', pup.region_iris[2]
-        ])
-    )
-    st.table(df)
+    pup.image_processed = pup.draw_circle_perimeter(image=pup.image_processing.copy(), region=pup.region_pupil)
+    pup.image_processed = pup.draw_circle_perimeter(image=pup.image_processed, region=pup.region_iris)
+    pup.show_image(pup.image_processed)
+    st.pyplot()
+
+    st.table(pup.get_df_results())
+
+
+def plot_radius_chart():
+    pup.radius_pupil_iris.append((pup.region_pupil[2], pup.region_iris[2]))
+    st.line_chart(pup.get_chart_data())
 
 
 def about():
     st.sidebar.title('Sobre')
     st.sidebar.info(
         '''
-        Desenvolvido por **Matheus Bosa** como requisito para avaliação em TE105 Projeto de Graduação
-        do curso de Engenharia Elétrica da Universidade Federal do Paraná (UFPR).
-        [LinkedIn](https://www.linkedin.com/in/matheusbosa/) e [GitHub](https://github.com/bosamatheus).
+        Desenvolvido por **[Matheus Bosa](https://bosamatheus.github.io/)** como requisito para avaliação em 
+        TE105 Projeto de Graduação do curso de Engenharia Elétrica da Universidade Federal do Paraná (UFPR).
         '''
     )
-    st.sidebar.image(os.path.join(os.path.dirname(__file__), 'profile.jpg'), use_column_width=True)
+    st.sidebar.image(image='./resources/profile.jpg', use_column_width=True)
+    #st.sidebar.text(image=os.path.join(os.path.dirname(__file__), 'resources', 'profile.jpg'))
 
 
 if __name__ == '__main__':
