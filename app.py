@@ -25,8 +25,10 @@ def main():
         st.markdown('<style>{}</style>'.format(f.read()), unsafe_allow_html=True)
 
     st.sidebar.title('Pupilometria Dinâmica')
+    st.sidebar.image('./resources/ufpr.jpg', width=150)
+    st.sidebar.image('./resources/delt.png', width=100)
     st.title('Pupilometria Dinâmica :o:')
-    st.sidebar.info('Aplicação que realiza a segmentação das regiões da pupila e íris em imagens de pupilometria dinâmica.')
+    st.sidebar.info('Sistema de detecção automática de pupila e íris em imagens de pupilometria dinâmica.')
 
     pup = get_pupillometry()
 
@@ -41,7 +43,7 @@ def main():
                 st.write(pup.get_summary_config())
 
             if st.checkbox('Segmentar pupila e íris'):
-                st.info('Processando frame ' + str(len(pup.images_hash_processed)+1) + ' de ' + str(len(pup.images_to_process)))
+                st.info(f'Processando quadro {len(pup.images_hash_processed)+1} de {len(pup.images_to_process)}.')
                 for hashfile, image in pup.images_to_process.items():
                     if hashfile not in pup.images_hash_processed:
                         pup.image_processing = image
@@ -132,7 +134,7 @@ def multiple_files_uploader():
             pup.images_to_process.clear()
         if st.checkbox('Mostrar lista de imagens', True):
             for index, hashfile in enumerate(pup.images_to_process.keys()):
-                st.text(str(index+1) + ' - hash ' + str(hashfile))
+                st.text(f'{index+1} - hash {hashfile}')
                 if st.checkbox('Mostrar imagem ' + str(index+1)):
                     df = pup.show_image_and_summary_table(image=pup.images_to_process.get(hashfile))
                     st.pyplot()
@@ -156,7 +158,7 @@ def run_all_steps():
                                                         k=pup.config['pre_proc_flash_k'], 
                                                         selem=selem_blur_filter)
     if len(pup.artifacts_found) > 0:
-        st.success('Reflexos encontrados e tratados em: ' + str(pup.artifacts_found).strip('[]') + '.')
+        st.success(f'Reflexos encontrados e tratados em: {str(pup.artifacts_found).strip("[]")}.')
 
     # ---> Segmentação da pupila <----
     image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.image_pre_processed)
@@ -165,7 +167,7 @@ def run_all_steps():
         # Histograma
         _, bins = pup.get_histogram(image=image_pre_processed_ubyte, n_bins=pup.config['seg_pup_bin_nbins'])
         thresh = int(round(bins[1]))
-        st.text('Valor do limiar de binarização: ' + str(thresh))
+        st.text(f'Valor do limiar de binarização: {thresh}')
         image_bin = pup.get_image_as_float(image_pre_processed_ubyte < thresh)
 
         # Morfologia matemática
@@ -174,7 +176,7 @@ def run_all_steps():
                                     sigma=None,
                                     type_of_function=pup.config['seg_pup_morph_type'])
         image_labels, n_labels = pup.labelizer_image(image=image_morph)
-        st.text('Número de regiões encontradas: ' + str(n_labels))
+        st.text(f'Número de regiões encontradas: {n_labels}')
 
         # Localização da pupila
         regions = pup.get_regionprops(image_labels)
@@ -184,19 +186,13 @@ def run_all_steps():
         pup.region_pupil = (row_pupil, col_pupil, radius_pupil)
         pup.bbox_pupil = region.bbox
         
-    elif pup.config['seg_pup_method'] == 'Detecção de bordas e transformada circular de Hough':
+    elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
         image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
         
         st.info('Aplicando transformada de Hough...')
         pup.region_pupil = __circle_hough_transform(image_edges)
         pup.bbox_pupil = pup.get_bounding_box(region=pup.region_pupil)
         st.success('Busca por circunferências na imagem foi encerrada.')
-
-    elif pup.config['seg_pup_method'] == 'Projeções horizontal e vertical':
-        pass
-
-    #if pup.region_pupil is not None:
-        #pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
 
     # ---> Segmentação da íris <----
     pup.image_filtered_high = pup.transform_image(image=pup.image_pre_processed.copy(),
@@ -208,10 +204,7 @@ def run_all_steps():
     pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
     st.success('Busca encerrada.')
 
-    #if pup.region_iris is not None:
-        #pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
-
-    st.text('Tempo de processamento do frame: ' + str(round(time.time() - start_time, 3)) + ' segundos.')
+    st.text(f'Tempo de processamento do quadro: {round(time.time() - start_time, 3)} segundos.')
 
     # ---> Resultados <----
     results()
@@ -246,13 +239,7 @@ def pre_processing():
         
     if st.checkbox('Tratamento de reflexos'):
         if pup.image_filtered_blur is not None:
-            image_flash_parameters = os.path.join(os.path.dirname(__file__), 'resources', 'flash_parameters.png')
-            image_flash_example = os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg')
-            st.image(image=[image_flash_example, image_flash_parameters], caption=['Reflexos especulares numa imagem.', 'Parâmetros L e k.'], width=300)
-            #image_flash_parameters = pup.get_image(os.path.join(os.path.dirname(__file__), 'resources', 'flash_parameters.png'))
-            #image_flash_example = pup.get_image(os.path.join(os.path.dirname(__file__), 'images', '12_2_frame_0000.jpg'))
-            #pup.show_all_images([image_flash_parameters, image_flash_example], nrows=1, ncols=2, titles=['Reflexos especulares numa imagem', 'Parâmetros L e k'])
-            #st.pyplot()
+            st.image(image='./resources/flash_parameters.png', caption='Parâmetros L e k.', width=200)
 
             pup.config['pre_proc_flash_l'] = st.slider('Valor do parâmetro L:', min_value=1, max_value=50, value=6)
             pup.config['pre_proc_flash_k'] = st.slider('Valor do parâmetro k:', min_value=1.1, max_value=5.0, value=1.5)
@@ -267,7 +254,7 @@ def pre_processing():
             if len(pup.artifacts_found) > 0:
                 pup.show_all_images([pup.image_filtered_blur, pup.image_pre_processed], titles=['Antes', 'Depois'], nrows=1, ncols=2)
                 st.pyplot()
-                st.success('Reflexos encontrados e tratados em: ' + str(pup.artifacts_found).strip('[]') + '.')
+                st.success(f'Reflexos encontrados e tratados em: {str(pup.artifacts_found).strip("[]")}.')
 
             elif pup.image_pre_processed is None:
                 st.info('Configure os parâmetros e clique sobre o botão "Tratar reflexos".')
@@ -294,16 +281,13 @@ def __handle_flashes(L, k, selem):
 def pupil_segmentation():
     st.subheader(':black_circle: Segmentação da pupila')
 
-    pup.config['seg_pup_method'] = st.radio('Selecione um método:', ('Binarização global', 'Detecção de bordas e transformada circular de Hough', 'Projeções horizontal e vertical'))
+    pup.config['seg_pup_method'] = st.radio('Selecione um método:', ('Binarização global', 'Identificação de circunferências'))
 
     if pup.config['seg_pup_method'] == 'Binarização global':
         pupil_segment_global_binarization()
 
-    elif pup.config['seg_pup_method'] == 'Detecção de bordas e transformada circular de Hough':
+    elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
         pupil_segment_canny_hough()
-
-    elif pup.config['seg_pup_method'] == 'Projeções horizontal e vertical':
-        pass
 
     if pup.region_pupil is not None:
         st.markdown(':pushpin: Pupila segmentada')
@@ -311,11 +295,8 @@ def pupil_segmentation():
         pup.show_image(pup.image_pupil)
         st.pyplot()
 
-        st.success('Pupila encontrada em ('
-                    + str(pup.region_pupil[0]) + ', ' 
-                    + str(pup.region_pupil[1]) + ') com raio de '
-                    + str(pup.region_pupil[2]) + ' pixels.')
-        st.info('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_pupil))
+        st.success(f'Pupila encontrada em ({pup.region_pupil[0]}, {pup.region_pupil[1]}) com raio de {pup.region_pupil[2]} pixels.')
+        st.info(f'Bounding box (min_row, min_col, max_row, max_col): {pup.bbox_pupil}')
 
     else:
         st.warning('A região da pupila não foi encontrada na imagem.')
@@ -353,7 +334,7 @@ def pupil_segment_global_binarization():
     
         image_labels, n_labels = pup.labelizer_image(image=image_morph)
 
-        st.text('Número de regiões encontradas: ' + str(n_labels))
+        st.text(f'Número de regiões encontradas: {n_labels}')
         if st.checkbox('Mostrar imagem com rótulos'):
             image_labels_colored = pup.label_to_rgb(image_labels, image=pup.image_pre_processed)
             pup.show_image(image_labels_colored)
@@ -392,8 +373,8 @@ def pupil_segment_canny_hough():
         otsu_thresh = pup.get_otsu_threshold(image=image_pre_processed_ubyte)
         pup.config['seg_pup_hough_lthresh'] = 0.5 * otsu_thresh
         pup.config['seg_pup_hough_hthresh'] = otsu_thresh
-        st.text('Limiar inferior: ' + str(round(pup.config['seg_pup_hough_lthresh'], 3)) + ' (0,5 * Otsu)')
-        st.text('Limiar superior: ' + str(round(pup.config['seg_pup_hough_hthresh'], 3)) + ' (Otsu)')
+        st.text(f'Limiar inferior: {round(pup.config["seg_pup_hough_lthresh"], 3)} (0,5 * Otsu)')
+        st.text(f'Limiar superior: {round(pup.config["seg_pup_hough_hthresh"], 3)} (Otsu)')
 
     st.info('Buscando por bordas na imagem...')
     image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
@@ -451,10 +432,7 @@ def iris_segmentation():
                 pup.show_image(pup.image_iris)
                 st.pyplot()
 
-                st.success('Íris encontrada em ('
-                            + str(pup.region_iris[0]) + ', ' 
-                            + str(pup.region_iris[1]) + ') com raio de '
-                            + str(pup.region_iris[2]) + ' pixels.')
+                st.success(f'Íris encontrada em ({pup.region_iris[0]}, {pup.region_iris[1]}) com raio de {pup.region_iris[2]} pixels.')
                 st.info('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_iris))
 
             else:
@@ -498,9 +476,7 @@ def about():
         TE105 Projeto de Graduação do curso de Engenharia Elétrica da Universidade Federal do Paraná (UFPR).
         '''
     )
-    st.sidebar.image(image='./resources/profile.jpg', use_column_width=True)
-    #st.sidebar.text(image=os.path.join(os.path.dirname(__file__), 'resources', 'profile.jpg'))
-
+    st.sidebar.image(image='./resources/profile.png', width=200)
 
 if __name__ == '__main__':
     main()
