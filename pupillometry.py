@@ -13,9 +13,9 @@ from skimage.draw import disk as draw_disk, circle_perimeter
 from skimage.exposure import equalize_hist
 from skimage.feature import canny
 from skimage.filters import gaussian as gaussian_filter, threshold_otsu
-from skimage.filters import sobel, sobel_v, sobel_h
-from skimage.filters import scharr, scharr_v, scharr_h
-from skimage.filters import prewitt, prewitt_v, prewitt_h
+from skimage.filters import sobel_v, sobel
+from skimage.filters import scharr_v, scharr
+from skimage.filters import prewitt_v, prewitt
 from skimage.filters.rank import mean as mean_filter, median as median_filter
 from skimage.measure import regionprops, label as measure_label
 from skimage.morphology import square, disk
@@ -30,7 +30,7 @@ class Pupillometry:
     def __init__(self):
         # Constantes
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
-        self.high_filters = ['Prewitt horizontal', 'Prewitt vertical', 'Prewitt', 'Sobel horizontal', 'Sobel vertical', 'Sobel', 'Scharr horizontal', 'Scharr vertical', 'Scharr']
+        self.high_filters = ['Prewitt vertical', 'Sobel vertical', 'Scharr vertical']
         self.morph_operators = ['Erosão', 'Dilatação', 'Abertura', 'Fechamento']
         
         # Configuração
@@ -153,19 +153,21 @@ class Pupillometry:
             data=np.array([image_pre_processed_ubyte.shape, image_pre_processed_ubyte.min(), image_pre_processed_ubyte.max()]))
 
 
-    def show_image_and_histogram(self, image, image_bin, n_bins):
+    def show_image_and_histogram(self, image, image_bin, n_bins, cmap='gray'):
         fig = plt.figure()
         fig.add_subplot(1, 2, 1)
         plt.hist(image.ravel(), bins=n_bins)
         fig.add_subplot(1, 2, 2)
-        plt.imshow(image_bin, cmap='gray')
+        plt.imshow(image_bin, cmap)
 
 
     def show_all_images(self, images, nrows, ncols, titles=None, cmap='gray'):
         fig, axes = plt.subplots(nrows, ncols)
         fig.tight_layout()
-        for ax, img, label in zip(axes.ravel(), images, titles):
-            ax.imshow(img, cmap)
+        for ax, image, label in zip(axes.ravel(), images, titles):
+            print(cmap)
+            print(image.min(), image.max())
+            ax.imshow(image, cmap)
             ax.set_title(label)
 
 
@@ -201,9 +203,9 @@ class Pupillometry:
     def transform_image(self, image, selem, sigma, type_of_function):
         # Filtros de suavização
         if type_of_function == 'Média':
-            return mean_filter(img_as_ubyte(image), selem)
+            return self.get_image_as_float(mean_filter(self.get_image_as_ubyte(image), selem))
         elif type_of_function == 'Mediana':
-            return median_filter(img_as_ubyte(image), selem)
+            return self.get_image_as_float(median_filter(self.get_image_as_ubyte(image), selem))
         elif type_of_function == 'Gaussiano':
             return gaussian_filter(image, sigma)
         elif type_of_function == 'Equalização de histograma':
@@ -336,12 +338,16 @@ class Pupillometry:
         return region
 
 
-    def get_chart_data(self):
-        print(np.array(self.radius_pupil_iris))
-        chart_data = pd.DataFrame(
+    def lineplot(self):
+        df = pd.DataFrame(
             columns=['Raio pupila (pixels)', 'Raio íris (pixels)'],
+            index=list(range(1, len(self.radius_pupil_iris)+1)),
             data=np.array(self.radius_pupil_iris))
-        return chart_data
+
+        sns.lineplot(data=df, markers=True, dashes=False)
+        plt.xlabel('Quadro')
+        plt.ylabel('Raio (pixels)')
+        plt.legend(labels=['Pupila', 'Íris'])
 
 
     def get_df_results(self):

@@ -38,18 +38,25 @@ def main():
 
     if mode == 'Completo':
         if len(pup.images_to_process) > 0:
+            st.subheader(':mag_right: Configuração')
             if st.checkbox('Mostrar configuração'):
-                st.subheader(':mag_right: Configuração')
                 st.write(pup.get_summary_config())
 
-            if st.checkbox('Segmentar pupila e íris'):
-                st.info(f'Processando quadro {len(pup.images_hash_processed)+1} de {len(pup.images_to_process)}.')
-                for hashfile, image in pup.images_to_process.items():
-                    if hashfile not in pup.images_hash_processed:
-                        pup.image_processing = image
-                        run_all_steps()
-                        pup.images_hash_processed.append(hashfile)
-                plot_radius_chart()
+            st.subheader(':pushpin: Segmentação da pupila e da íris')
+            if st.checkbox('Segmentar regiões'):
+                if st.button('Reset'):
+                    pup.reset()
+
+                else:
+                    st.info(f'Processando imagem {len(pup.images_hash_processed)+1} de {len(pup.images_to_process)}.')
+
+                    for hashfile, image in pup.images_to_process.items():
+                        if hashfile not in pup.images_hash_processed:
+                            pup.image_processing = image
+                            run_all_steps()
+                            pup.images_hash_processed.append(hashfile)
+                    plot_radius_chart()
+
             else:
                 pup.images_hash_processed = list()
 
@@ -156,7 +163,8 @@ def run_all_steps():
     st.info('Tratando reflexos. Isso pode demorar um pouco...')
     pup.image_pre_processed, pup.artifacts_found = __handle_flashes(L=pup.config['pre_proc_flash_l'], 
                                                         k=pup.config['pre_proc_flash_k'], 
-                                                        selem=selem_blur_filter)
+                                                        selem=selem_blur_filter,
+                                                        image=pup.image_filtered_blur.copy())
     if len(pup.artifacts_found) > 0:
         st.success(f'Reflexos encontrados e tratados em: {str(pup.artifacts_found).strip("[]")}.')
 
@@ -187,10 +195,13 @@ def run_all_steps():
         pup.bbox_pupil = region.bbox
         
     elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
-        image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
+        image_edges = __canny_filter(sigma=pup.config['seg_pup_hough_sigma'], 
+                                     low_threshold=low_pup.config['seg_pup_hough_lthresh'], 
+                                     high_threshold=pup.config['seg_pup_hough_hthresh'],
+                                     image=image_pre_processed_ubyte)
         
         st.info('Aplicando transformada de Hough...')
-        pup.region_pupil = __circle_hough_transform(image_edges)
+        pup.region_pupil = __circle_hough_transform(image=image_edges)
         pup.bbox_pupil = pup.get_bounding_box(region=pup.region_pupil)
         st.success('Busca por circunferências na imagem foi encerrada.')
 
@@ -199,12 +210,13 @@ def run_all_steps():
                                 selem=pup.get_selem(pup.config['seg_pup_bin_width']),
                                 sigma=None,
                                 type_of_function=pup.config['seg_iris_filter_type'])
+
     st.info('Buscando pela região de fronteira entre íris e esclera..')
-    pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high)
+    pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high.copy())
     pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
     st.success('Busca encerrada.')
 
-    st.text(f'Tempo de processamento do quadro: {round(time.time() - start_time, 3)} segundos.')
+    st.text(f'Tempo de processamento do imagem: {round(time.time() - start_time, 3)} segundos.')
 
     # ---> Resultados <----
     results()
@@ -215,13 +227,17 @@ def pre_processing():
     
     if st.checkbox('Filtragem de suavização'):
         if pup.image_processing is not None:
-            pup.config['pre_proc_filter_width'] = st.slider('Largura do elemento estruturante:', min_value=1, max_value=20, value=5)
+            pup.config['pre_proc_filter_width'] = st.slider('Largura do elemento estruturante para filtragem de suavização:', 
+                                                            min_value=1, max_value=20, value=5)
             selem = pup.get_selem(pup.config['pre_proc_filter_width'])
             st.write(selem)
-            pup.config['pre_proc_filter_sigma'] = st.slider('Valor do desvio padrão σ do kernel gaussiano:', min_value=.01, max_value=10., value=1.)
+            pup.config['pre_proc_filter_sigma'] = st.slider('Valor do desvio padrão σ do kernel gaussiano:', 
+                                                            min_value=.01, max_value=10., value=1.)
     
-            if st.button('Filtrar'):
-                pup.images_to_plot_blur = __images_to_plot_blur_filtering(selem, pup.config['pre_proc_filter_sigma'])
+            if st.button('Aplicar filtragem passa-baixas'):
+                pup.images_to_plot_blur = __images_to_plot_blur_filtering(selem=selem, 
+                                                                          sigma=pup.config['pre_proc_filter_sigma'], 
+                                                                          image=pup.image_processing)
 
             if pup.images_to_plot_blur is not None:
                 st.markdown('Resultado:')
@@ -232,7 +248,7 @@ def pre_processing():
                 pup.image_filtered_blur = pup.images_to_plot_blur.get(pup.config['pre_proc_filter_type'])
 
             else:
-                st.info('Configure os parâmetros e clique sobre o botão "Filtrar".')
+                st.info('Configure os parâmetros e clique sobre o botão acima.')
 
         else:
             st.warning('Execute a etapa de carregamento de imagem antes de proceder.')
@@ -241,23 +257,30 @@ def pre_processing():
         if pup.image_filtered_blur is not None:
             st.image(image='./resources/flash_parameters.png', caption='Parâmetros L e k.', width=200)
 
-            pup.config['pre_proc_flash_l'] = st.slider('Valor do parâmetro L:', min_value=1, max_value=50, value=6)
-            pup.config['pre_proc_flash_k'] = st.slider('Valor do parâmetro k:', min_value=1.1, max_value=5.0, value=1.5)
-            pup.config['pre_proc_flash_width'] = st.slider('Largura do elemento estruturante para filtragem de suavização:', min_value=1, max_value=20, value=3)
+            pup.config['pre_proc_flash_l'] = st.slider('Valor do parâmetro L:', 
+                                                        min_value=1, max_value=50, value=6)
+            pup.config['pre_proc_flash_k'] = st.slider('Valor do parâmetro k:', 
+                                                        min_value=1.1, max_value=5.0, value=1.5)
+            pup.config['pre_proc_flash_width'] = st.slider('Largura do elemento estruturante para filtragem pela mediana:', 
+                                                        min_value=1, max_value=20, value=3)
             selem = pup.get_selem(pup.config['pre_proc_flash_width'])
             st.write(selem)
 
             if st.button('Tratar reflexos'):
                 st.info('Tratando reflexos. Isso pode demorar um pouco...')
-                pup.image_pre_processed, pup.artifacts_found = __handle_flashes(pup.config['pre_proc_flash_l'], pup.config['pre_proc_flash_k'], selem)
+                pup.image_pre_processed, pup.artifacts_found = __handle_flashes(L=pup.config['pre_proc_flash_l'], 
+                                                                                k=pup.config['pre_proc_flash_k'], 
+                                                                                selem=selem, 
+                                                                                image=pup.image_filtered_blur.copy())
 
             if len(pup.artifacts_found) > 0:
-                pup.show_all_images([pup.image_filtered_blur, pup.image_pre_processed], titles=['Antes', 'Depois'], nrows=1, ncols=2)
+                pup.show_all_images([pup.image_filtered_blur, pup.image_pre_processed], 
+                                    titles=['Antes', 'Depois'], nrows=1, ncols=2)
                 st.pyplot()
                 st.success(f'Reflexos encontrados e tratados em: {str(pup.artifacts_found).strip("[]")}.')
 
             elif pup.image_pre_processed is None:
-                st.info('Configure os parâmetros e clique sobre o botão "Tratar reflexos".')
+                st.info('Configure os parâmetros e clique sobre o botão acima.')
 
             else:
                 st.success('Nenhum reflexo foi encontrado a partir dos parâmetros.')
@@ -267,13 +290,13 @@ def pre_processing():
 
 
 @st.cache(suppress_st_warning=True)
-def __images_to_plot_blur_filtering(selem, sigma):
-    return pup.get_blur_filtered_images(selem, sigma, image=pup.image_processing.copy())
+def __images_to_plot_blur_filtering(selem, sigma, image):
+    return pup.get_blur_filtered_images(selem, sigma, image)
 
 
 @st.cache(suppress_st_warning=True)
-def __handle_flashes(L, k, selem):
-    image_handle_flashes, artifacts = pup.handle_flashes(L, k, pup.image_filtered_blur.copy())
+def __handle_flashes(L, k, selem, image):
+    image_handle_flashes, artifacts = pup.handle_flashes(L, k, image)
     image_pre_processed = pup.transform_image(image_handle_flashes, selem=selem, sigma=None, type_of_function='Mediana')
     return image_pre_processed, artifacts
 
@@ -281,7 +304,8 @@ def __handle_flashes(L, k, selem):
 def pupil_segmentation():
     st.subheader(':black_circle: Segmentação da pupila')
 
-    pup.config['seg_pup_method'] = st.radio('Selecione um método:', ('Binarização global', 'Identificação de circunferências'))
+    pup.config['seg_pup_method'] = st.radio('Selecione um método:', 
+                                    ('Binarização global', 'Identificação de circunferências'))
 
     if pup.config['seg_pup_method'] == 'Binarização global':
         pupil_segment_global_binarization()
@@ -317,7 +341,8 @@ def pupil_segment_global_binarization():
     st.pyplot()
 
     st.markdown(':pushpin: Morfologia matemática binária')
-    pup.config['seg_pup_bin_width'] = st.slider('Largura do elemento estruturante morfológico:', min_value=1, max_value=20, value=11)
+    pup.config['seg_pup_bin_width'] = st.slider('Largura do elemento estruturante morfológico:', 
+                                                min_value=1, max_value=20, value=11)
     selem = pup.get_selem(pup.config['seg_pup_bin_width'])
     st.write(selem)
     
@@ -349,25 +374,28 @@ def pupil_segment_global_binarization():
         pup.bbox_pupil = region.bbox
 
     else:
-        st.info('Configure os parâmetros e clique sobre o botão "Aplicar operações morfológicas".')
+        st.info('Configure os parâmetros e clique sobre o botão acima.')
 
 
 @st.cache(suppress_st_warning=True)
-def __images_to_plot_morph(selem, image_bin):
-    return pup.get_images_morphologically_transformed(selem, image=image_bin)
+def __images_to_plot_morph(selem, image):
+    return pup.get_images_morphologically_transformed(selem, image)
 
 
 def pupil_segment_canny_hough():
     st.markdown(':pushpin: Filtro de Canny')
-    pup.config['seg_pup_hough_sigma'] = st.slider('Valor do desvio padrão σ:', min_value=.01, max_value=10., value=1.0)
+    pup.config['seg_pup_hough_sigma'] = st.slider('Valor do desvio padrão σ:', 
+                                            min_value=.01, max_value=10., value=1.0)
 
     pup.config['seg_pup_hough_opthresh'] = st.radio('Configuração dos valores de limiar:', ('Manual', 'Otsu'))
 
     image_pre_processed_ubyte = pup.get_image_as_ubyte(pup.image_pre_processed)
 
     if pup.config['seg_pup_hough_opthresh'] == 'Manual':
-        pup.config['seg_pup_hough_lthresh'] = st.slider('Valor do limiar inferior:', min_value=0, max_value=255, value=1)
-        pup.config['seg_pup_hough_hthresh'] = st.slider('Valor do limiar superior:', min_value=0, max_value=255, value=10)
+        pup.config['seg_pup_hough_lthresh'] = st.slider('Valor do limiar inferior:', 
+                                                    min_value=0, max_value=255, value=1)
+        pup.config['seg_pup_hough_hthresh'] = st.slider('Valor do limiar superior:', 
+                                                    min_value=0, max_value=255, value=10)
     
     elif pup.config['seg_pup_hough_opthresh'] == 'Otsu':
         otsu_thresh = pup.get_otsu_threshold(image=image_pre_processed_ubyte)
@@ -377,79 +405,78 @@ def pupil_segment_canny_hough():
         st.text(f'Limiar superior: {round(pup.config["seg_pup_hough_hthresh"], 3)} (Otsu)')
 
     st.info('Buscando por bordas na imagem...')
-    image_edges = __canny_filter(pup.config['seg_pup_hough_sigma'], pup.config['seg_pup_hough_lthresh'], pup.config['seg_pup_hough_hthresh'], image=image_pre_processed_ubyte)
+    image_edges = __canny_filter(sigma=pup.config['seg_pup_hough_sigma'], 
+                                 low_threshold=pup.config['seg_pup_hough_lthresh'], 
+                                 high_threshold=pup.config['seg_pup_hough_hthresh'], 
+                                 image=image_pre_processed_ubyte)
     st.success('Busca encerrada.')
     pup.show_image(image_edges)
     st.pyplot()
 
     st.markdown(':pushpin: Transformada circular de Hough')
     st.info('Buscando por circunferências...')
-    pup.region_pupil = __circle_hough_transform(image_edges)
+    pup.region_pupil = __circle_hough_transform(image=image_edges)
     pup.bbox_pupil = pup.get_bounding_box(region=pup.region_pupil)
     st.success('Busca encerrada.')
 
 
 @st.cache(suppress_st_warning=True)
 def __canny_filter(sigma, low_threshold, high_threshold, image):
-    return pup.get_edges_canny(sigma, low_threshold, high_threshold, image.copy())
+    return pup.get_edges_canny(sigma, low_threshold, high_threshold, image)
 
 
 @st.cache(suppress_st_warning=True)
-def __circle_hough_transform(image_edges):
-    return pup.pupil_segmentation_hough(image_edges.copy())
+def __circle_hough_transform(image):
+    return pup.pupil_segmentation_hough(image)
 
 
 def iris_segmentation():
     st.subheader(':o: Segmentação da íris')
 
-    if st.checkbox('Filtragem de realce'):
+    pup.config['seg_iris_filter_width'] = st.slider('Largura do elemento estruturante para filtragem de realce:', 
+                                                min_value=1, max_value=20, value=5)
+    selem = pup.get_selem(pup.config['seg_iris_filter_width'])
+    st.write(selem)
 
-        pup.config['seg_iris_filter_width'] = st.slider('Largura do elemento estruturante:', min_value=1, max_value=20, value=5)
-        selem = pup.get_selem(pup.config['seg_iris_filter_width'])
-        st.write(selem)
+    if st.button('Aplicar filtragem passa-altas'):
+        pup.images_to_plot_high = __images_to_plot_high_filtering(selem, image=pup.image_pre_processed.copy())
 
-        if st.button('Filtrar'):
-            pup.images_to_plot_high = __images_to_plot_high_filtering(selem)
-
-        if pup.images_to_plot_high is not None:
-            st.markdown('Resultado:')
-            pup.show_all_images(pup.images_to_plot_high.values(), nrows=3, ncols=3, titles=pup.high_filters)
-            st.pyplot()
-            
-            pup.config['seg_iris_filter_type'] = st.selectbox('Selecione o filtro com melhor resultado:', pup.high_filters)
-            pup.image_filtered_high = pup.images_to_plot_high.get(pup.config['seg_iris_filter_type'])
-
-        if pup.image_filtered_high is not None:
-            st.info('Buscando pela região de fronteira entre íris e esclera..')
-            pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high)
-            pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
-            st.success('Busca encerrada.')
+    if pup.images_to_plot_high is not None:
+        st.markdown('Resultado:')
+        pup.show_all_images(pup.images_to_plot_high.values(), nrows=3, ncols=1, titles=pup.high_filters)
+        st.pyplot()
         
-            if pup.region_iris is not None:
-                st.markdown(':pushpin: Íris segmentada')
+        pup.config['seg_iris_filter_type'] = st.selectbox('Selecione o filtro com melhor resultado:', pup.high_filters)
+        pup.image_filtered_high = pup.images_to_plot_high.get(pup.config['seg_iris_filter_type'])
 
-                pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
-                pup.show_image(pup.image_iris)
-                st.pyplot()
+    if pup.image_filtered_high is not None:
+        st.info('Buscando pela região de fronteira entre íris e esclera..')
+        pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high.copy())
+        pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
+        st.success('Busca encerrada.')
+    
+        if pup.region_iris is not None:
+            st.markdown(':pushpin: Íris segmentada')
 
-                st.success(f'Íris encontrada em ({pup.region_iris[0]}, {pup.region_iris[1]}) com raio de {pup.region_iris[2]} pixels.')
-                st.info('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_iris))
+            pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
+            pup.show_image(pup.image_iris)
+            st.pyplot()
 
-            else:
-                st.warning('A região da íris não foi encontrada na imagem.')
-                pup.image_iris = None
+            st.success(f'Íris encontrada em ({pup.region_iris[0]}, {pup.region_iris[1]}) com raio de {pup.region_iris[2]} pixels.')
+            st.info('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_iris))
 
         else:
-            st.info('Configure os parâmetros e clique sobre o botão "Filtrar".')
+            st.warning('A região da íris não foi encontrada na imagem.')
+            pup.image_iris = None
    
 
 @st.cache(suppress_st_warning=True)
-def __images_to_plot_high_filtering(selem):
-    return pup.get_high_filtered_images(selem, image=pup.image_pre_processed.copy())
+def __images_to_plot_high_filtering(selem, image):
+    return pup.get_high_filtered_images(selem, image)
 
 
 def __iris_segmentation_horizontal_gradient(image):
-    return pup.iris_segmentation_horizontal_gradient(image=image.copy(), offset_col_low=50, offset_col_high=120)
+    return pup.iris_segmentation_horizontal_gradient(image=image, offset_col_low=50, offset_col_high=120)
 
 
 def results():
@@ -463,9 +490,10 @@ def results():
     st.table(pup.get_df_results())
 
 
-def plot_radius_chart():
+def plot_radius_chart():    
     pup.radius_pupil_iris.append((pup.region_pupil[2], pup.region_iris[2]))
-    st.line_chart(pup.get_chart_data())
+    pup.lineplot()
+    st.pyplot()
 
 
 def about():
@@ -477,6 +505,7 @@ def about():
         '''
     )
     st.sidebar.image(image='./resources/profile.png', width=200)
+
 
 if __name__ == '__main__':
     main()
