@@ -12,7 +12,7 @@ from skimage.color import label2rgb
 from skimage.draw import disk as draw_disk, circle_perimeter
 from skimage.exposure import equalize_hist
 from skimage.feature import canny
-from skimage.filters import gaussian as gaussian_filter, threshold_otsu
+from skimage.filters import gaussian as gaussian_filter
 from skimage.filters import sobel_v, sobel
 from skimage.filters import scharr_v, scharr
 from skimage.filters import prewitt_v, prewitt
@@ -28,6 +28,14 @@ class Pupillometry:
 
 
     def __init__(self):
+        # Mode de teste
+        self.test_mode = False
+        self.radius_pupil_iris_test_mode = {
+            '14_2_frame_0125.jpg': [(100, 100, 100), (100, 100, 100)],
+            '30_2_frame_0149.jpg': [(100, 100, 100), (100, 100, 100)],
+            '48_1_frame_0149.jpg': [(100, 100, 100), (100, 100, 100)]
+        }
+
         # Constantes
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
         self.high_filters = ['Prewitt vertical', 'Sobel vertical', 'Scharr vertical']
@@ -47,28 +55,26 @@ class Pupillometry:
             'seg_pup_bin_width': 11,
             'seg_pup_morph_type': 'Fechamento',
             'seg_pup_hough_sigma': 1.,
-            'seg_pup_hough_opthresh': 'Manual',
             'seg_pup_hough_lthresh': 50,
             'seg_pup_hough_hthresh': 120,
             'seg_iris_filter_width': 5,
             'seg_iris_filter_type': 'Scharr vertical' 
         }
         self.config_translator = {
-            'pre_proc_filter_width': 'Filtragem de Suavização - Largura do elementro estruturante',
+            'pre_proc_filter_width': 'Filtragem de Suavização - Largura da máscara',
             'pre_proc_filter_sigma': 'Filtragem de Suavização - Desvio padrão σ gaussiano',
             'pre_proc_filter_type': 'Filtragem de Suavização - Método de filtragem',
             'pre_proc_flash_l': 'Tratamento de Reflexos - Parâmetro L',
             'pre_proc_flash_k': 'Tratamento de Reflexos - Parâmetro k',
-            'pre_proc_flash_width': 'Tratamento de Reflexos - Largura do elemento estruturante',
+            'pre_proc_flash_width': 'Tratamento de Reflexos - Largura da máscara do filtro da mediana',
             'seg_pup_method': 'Segmentação da Pupila - Método',
             'seg_pup_bin_nbins': 'Binarização Global - Número de bins',
             'seg_pup_bin_width': 'Binarização Global - Largura do elemento estruturante',
             'seg_pup_morph_type': 'Morfologia Binária Matemática - Operador',
-            'seg_pup_hough_sigma': 'Filtro de Canny - Desvio padrão σ gaussiano',
-            'seg_pup_hough_opthresh': 'Configuração Limiar - Manual ou Otsu',
-            'seg_pup_hough_lthresh': 'Filtro de Canny - Limiar inferior',
-            'seg_pup_hough_hthresh': 'Filtro de Canny - Limiar inferior',
-            'seg_iris_filter_width': 'Filtragem de Realce - Largura do elementro estruturant',
+            'seg_pup_hough_sigma': 'Detector de Bordas de Canny - Desvio padrão σ gaussiano',
+            'seg_pup_hough_lthresh': 'Detector de Bordas de Canny - Limiar inferior',
+            'seg_pup_hough_hthresh': 'Detector de Bordas de Canny - Limiar inferior',
+            'seg_iris_filter_width': 'Filtragem de Realce - Largura da máscara',
             'seg_iris_filter_type': 'Filtragem de Realce - Método de filtragem' 
         }
 
@@ -165,8 +171,6 @@ class Pupillometry:
         fig, axes = plt.subplots(nrows, ncols)
         fig.tight_layout()
         for ax, image, label in zip(axes.ravel(), images, titles):
-            print(cmap)
-            print(image.min(), image.max())
             ax.imshow(image, cmap)
             ax.set_title(label)
 
@@ -293,10 +297,6 @@ class Pupillometry:
 
     def get_regionprops(self, image_labels):
         return regionprops(image_labels)
-
-
-    def get_otsu_threshold(self, image):
-        return threshold_otsu(image)
 
 
     def get_edges_canny(self, sigma, low_threshold, high_threshold, image):
