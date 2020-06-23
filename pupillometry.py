@@ -28,13 +28,15 @@ class Pupillometry:
 
 
     def __init__(self):
-        # Mode de teste
+        # Modo de teste
         self.test_mode = False
-        self.radius_pupil_iris_test_mode = {
-            '14_2_frame_0125.jpg': [(100, 100, 100), (100, 100, 100)],
-            '30_2_frame_0149.jpg': [(100, 100, 100), (100, 100, 100)],
-            '48_1_frame_0149.jpg': [(100, 100, 100), (100, 100, 100)]
+        self.radius_pupil_iris_test = {
+            '14_2_frame_0125.jpg': [(215, 200, 62), (215, 200, 175)],
+            '30_2_frame_0149.jpg': [(250, 260, 95), (250, 260, 178)],
+            '48_1_frame_0149.jpg': [(315, 265, 74), (315, 265, 165)]
         }
+        self.images_to_process_test = dict()
+        self.image_processing_test = None
 
         # Constantes
         self.blur_filters = ['Média', 'Mediana', 'Gaussiano', 'Equalização de histograma']
@@ -100,6 +102,7 @@ class Pupillometry:
 
 
     def reset(self):
+        self.radius_pupil_iris = list()
         self.artifacts_found = list()
         self.image_processing = None
         self.image_filtered_blur = None
@@ -338,23 +341,26 @@ class Pupillometry:
         return region
 
 
-    def lineplot(self):
-        df = pd.DataFrame(
+    def get_df_results_for_one_image(self):
+        return pd.DataFrame(
+            columns=['Valor'],
+            index=['Centroide (linha, coluna)', 'Raio da Pupila (pixels)', 'Raio da Íris (pixels)'],
+            data=np.array(['(' + str(self.region_pupil[0]) + ', ' + str(self.region_pupil[1]) + ')', 
+                self.region_pupil[2],
+                self.region_iris[2]]))
+
+    
+    def get_df_results_for_all_images(self):
+        return pd.DataFrame(
             columns=['Raio pupila (pixels)', 'Raio íris (pixels)'],
             index=list(range(1, len(self.radius_pupil_iris)+1)),
             data=np.array(self.radius_pupil_iris))
+
+
+    def lineplot(self):
+        df = self.get_df_results_for_all_images()
 
         sns.lineplot(data=df, markers=True, dashes=False)
         plt.xlabel('Quadro')
         plt.ylabel('Raio (pixels)')
         plt.legend(labels=['Pupila', 'Íris'])
-
-
-    def get_df_results(self):
-        return pd.DataFrame(
-            columns=['Valor'],
-            index=['Pupila - Centro (linha, coluna)', 'Pupila - Raio (pixels)', 'Íris - Centro (linha, coluna)', 'Íris - Raio (pixels)'],
-            data=np.array([
-                '(' + str(self.region_pupil[0]) + ', ' + str(self.region_pupil[1]) + ')', self.region_pupil[2],
-                '(' + str(self.region_iris[0]) + ', ' + str(self.region_iris[1]) + ')', self.region_iris[2]
-            ]))

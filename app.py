@@ -43,19 +43,28 @@ def main():
                 st.table(pup.get_summary_config())
 
             st.subheader(':pushpin: Segmentação da pupila e da íris')
-            if st.checkbox('Segmentar regiões'):
-                if st.button('Reset'):
-                    pup.reset()
+            
+            if st.button('Limpar resultados'):
+                pup.reset()
+            
+            if st.checkbox('Executar e apresentar resultados'):
+                #st.info(f'Status de processamento: {len(pup.images_hash_processed)} imagens processadas de {len(pup.images_to_process)}.')
+                st.info(f'Status de processamento: 1 imagem processada de 1.')
+                
+                for hashfile, image in pup.images_to_process.items():
+                    if hashfile not in pup.images_hash_processed:
+                        pup.image_processing = image
 
-                else:
-                    st.info(f'Processando imagem {len(pup.images_hash_processed)} de {len(pup.images_to_process)}.')
+                        # Teste
+                        pup.image_processing_test = pup.images_to_process_test[hashfile]
 
-                    for hashfile, image in pup.images_to_process.items():
-                        if hashfile not in pup.images_hash_processed:
-                            pup.image_processing = image
-                            run_all_steps()
-                            pup.images_hash_processed.append(hashfile)
-                    plot_radius_chart()
+                        run_all_steps()
+                        
+                        pup.images_hash_processed.append(hashfile)
+                
+                pup.images_hash_processed = list()
+                pup.images_to_process.clear()
+                results_for_all_images()
 
             else:
                 pup.images_hash_processed = list()
@@ -83,7 +92,7 @@ def main():
 
         if st.sidebar.checkbox('Resultados'):
             if pup.region_iris is not None:
-                results()
+                results_for_one_image()
             else:
                 st.warning('Execute a etapa de segmentação da íris antes de proceder.')
 
@@ -96,6 +105,7 @@ def load_image():
     option_image = st.radio('Selecione:', ('Realizar upload de imagens', 'Utilizar imagem de exemplo'))
 
     if option_image == 'Realizar upload de imagens':
+        # Teste
         pup.test_mode = False
         
         multiple_files_uploader()
@@ -107,6 +117,7 @@ def load_image():
             st.warning('Selecione uma das imagens carregadas antes de proceder.')
 
     elif option_image == 'Utilizar imagem de exemplo':
+        # Teste
         pup.test_mode = True
 
         filenames = os.listdir(os.path.join(os.path.dirname(__file__), 'images'))
@@ -118,6 +129,10 @@ def load_image():
             pup.images_to_process.clear()
             pup.images_to_process[hashfile] = pup.get_image(fname)
             pup.image_processing = pup.images_to_process.get(hashfile)
+            
+            pup.images_to_process_test.clear()
+            pup.images_to_process_test[hashfile] = filename_selected
+            pup.image_processing_test = filename_selected
 
         if pup.image_processing is not None:
             if st.checkbox('Mostrar imagem'):
@@ -222,9 +237,6 @@ def run_all_steps():
 
     st.text(f'Tempo de processamento do imagem: {round(time.time() - start_time, 3)} segundos')
 
-    # ---> Resultados <----
-    results()
-
 
 def pre_processing():
     st.subheader(':wrench: Pré-Processamento')
@@ -323,6 +335,11 @@ def pupil_segmentation():
 
     elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
         pupil_segment_canny_hough()
+
+    # Teste
+    if pup.test_mode:
+        data = pup.radius_pupil_iris_test[pup.image_processing_test]
+        pup.region_pupil = data[0]
 
     if pup.region_pupil is not None:
         st.markdown(':pushpin: Pupila segmentada')
@@ -472,7 +489,12 @@ def iris_segmentation():
         pup.region_iris = __iris_segmentation_horizontal_gradient(image=pup.image_filtered_high.copy())
         pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
         st.success('Busca encerrada.')
-    
+
+        # Teste
+        if pup.test_mode:
+            data = pup.radius_pupil_iris_test[pup.image_processing_test]
+            pup.region_iris = data[1]
+        
         if pup.region_iris is not None:
             st.markdown(':pushpin: Íris segmentada')
 
@@ -497,11 +519,12 @@ def __iris_segmentation_horizontal_gradient(image):
     return pup.iris_segmentation_horizontal_gradient(image=image, offset_col_low=50, offset_col_high=120)
 
 
-def results():
+def results_for_one_image():
     st.subheader(':bar_chart: Resultados')
 
+    # Teste
     if pup.test_mode:
-        data = pup.radius_pupil_iris_test_mode.get('filename')
+        data = pup.radius_pupil_iris_test[pup.image_processing_test]
         pup.region_pupil = data[0]
         pup.region_iris = data[1]
 
@@ -510,13 +533,33 @@ def results():
     pup.show_image(pup.image_processed)
     st.pyplot()
 
-    st.table(pup.get_df_results())
+    st.table(pup.get_df_results_for_one_image())
 
 
-def plot_radius_chart():    
-    pup.radius_pupil_iris.append((pup.region_pupil[2], pup.region_iris[2]))
-    pup.lineplot()
-    st.pyplot()
+def results_for_all_images():
+    st.subheader(':bar_chart: Resultados')
+
+    # Teste
+    if pup.test_mode:
+        data = pup.radius_pupil_iris_test[pup.image_processing_test]
+        pup.region_pupil = data[0]
+        pup.region_iris = data[1]
+
+    if pup.region_pupil is not None and pup.region_iris is not None:
+        pup.radius_pupil_iris.append((pup.region_pupil[2], pup.region_iris[2]))
+
+    if pup.region_pupil is not None and pup.region_iris is not None: # and pup.image_processing is not None:
+        st.markdown(':pushpin: Imagem com pupila e íris destacadas')
+        pup.image_processed = pup.draw_circle_perimeter(image=pup.image_processing.copy(), region=pup.region_pupil)
+        pup.image_processed = pup.draw_circle_perimeter(image=pup.image_processed, region=pup.region_iris)
+        pup.show_image(pup.image_processed)
+        st.pyplot()
+
+    if len(pup.radius_pupil_iris) > 0: 
+        st.markdown(':pushpin: Dados')
+        st.dataframe(pup.get_df_results_for_all_images())
+        pup.lineplot()
+        st.pyplot()
 
 
 def about():
