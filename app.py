@@ -48,8 +48,7 @@ def main():
                 pup.reset()
             
             if st.checkbox('Executar e apresentar resultados'):
-                #st.info(f'Status de processamento: {len(pup.images_hash_processed)} imagens processadas de {len(pup.images_to_process)}.')
-                st.info(f'Status de processamento: 1 imagem processada de 1.')
+                st.info(f'Status de processamento: {len(pup.images_hash_processed)} imagens processadas de {len(pup.images_to_process)}.')
                 
                 for hashfile, image in pup.images_to_process.items():
                     if hashfile not in pup.images_hash_processed:
@@ -68,6 +67,7 @@ def main():
 
             else:
                 pup.images_hash_processed = list()
+                pup.images_to_process.clear()
 
     elif mode == 'Configuração':
         st.sidebar.markdown('Etapas:')
