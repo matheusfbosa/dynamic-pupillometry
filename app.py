@@ -48,8 +48,8 @@ def main():
                 pup.reset()
             
             if st.checkbox('Executar e apresentar resultados'):
-                st.info(f'Status de processamento: {len(pup.images_hash_processed)} imagens processadas de {len(pup.images_to_process)}.')
-                
+                #st.info(f'Status de processamento: {len(pup.images_hash_processed)} imagens processadas de {len(pup.images_to_process)}.')
+
                 for hashfile, image in pup.images_to_process.items():
                     if hashfile not in pup.images_hash_processed:
                         pup.image_processing = image
@@ -62,12 +62,7 @@ def main():
                         pup.images_hash_processed.append(hashfile)
                 
                 pup.images_hash_processed = list()
-                pup.images_to_process.clear()
                 results_for_all_images()
-
-            else:
-                pup.images_hash_processed = list()
-                pup.images_to_process.clear()
 
     elif mode == 'Configuração':
         st.sidebar.markdown('Etapas:')
@@ -215,7 +210,7 @@ def run_all_steps():
         
     elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
         image_edges = __canny_filter(sigma=pup.config['seg_pup_hough_sigma'], 
-                                     low_threshold=low_pup.config['seg_pup_hough_lthresh'], 
+                                     low_threshold=pup.config['seg_pup_hough_lthresh'], 
                                      high_threshold=pup.config['seg_pup_hough_hthresh'],
                                      image=image_pre_processed_ubyte)
         
@@ -336,23 +331,24 @@ def pupil_segmentation():
     elif pup.config['seg_pup_method'] == 'Identificação de circunferências':
         pupil_segment_canny_hough()
 
-    # Teste
-    if pup.test_mode:
-        data = pup.radius_pupil_iris_test[pup.image_processing_test]
-        pup.region_pupil = data[0]
+    if st.checkbox('Mostrar imagem com pupila segmentada'):
+        # Teste
+        if pup.test_mode:
+            data = pup.radius_pupil_iris_test[pup.image_processing_test]
+            pup.region_pupil = data[0]
 
-    if pup.region_pupil is not None:
-        st.markdown(':pushpin: Pupila segmentada')
-        pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
-        pup.show_image(pup.image_pupil)
-        st.pyplot()
+        if pup.region_pupil is not None:
+            st.markdown(':pushpin: Pupila segmentada')
+            pup.image_pupil = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_pupil)
+            pup.show_image(pup.image_pupil)
+            st.pyplot()
 
-        st.text(f'Bounding box (min_row, min_col, max_row, max_col): {pup.bbox_pupil}')
-        st.success(f'Pupila encontrada em ({pup.region_pupil[0]}, {pup.region_pupil[1]}) com raio de {pup.region_pupil[2]} pixels.')
+            st.text(f'Bounding box (min_row, min_col, max_row, max_col): {pup.bbox_pupil}')
+            st.success(f'Pupila encontrada em ({pup.region_pupil[0]}, {pup.region_pupil[1]}) com raio de {pup.region_pupil[2]} pixels.')
 
-    else:
-        st.warning('A região da pupila não foi encontrada na imagem.')
-        pup.image_pupil = None
+        else:
+            st.warning('A região da pupila não foi encontrada na imagem.')
+            pup.image_pupil = None
 
 
 def pupil_segment_global_binarization():
@@ -478,7 +474,7 @@ def iris_segmentation():
 
     if pup.images_to_plot_high is not None:
         st.markdown('Resultado:')
-        pup.show_all_images(pup.images_to_plot_high.values(), nrows=3, ncols=1, titles=pup.high_filters)
+        pup.show_all_images(pup.images_to_plot_high.values(), nrows=1, ncols=3, titles=pup.high_filters)
         st.pyplot()
         
         pup.config['seg_iris_filter_type'] = st.selectbox('Selecione o filtro com melhor resultado:', pup.high_filters)
@@ -490,24 +486,25 @@ def iris_segmentation():
         pup.bbox_iris = pup.get_bounding_box(region=pup.region_iris)
         st.success('Busca encerrada.')
 
-        # Teste
-        if pup.test_mode:
-            data = pup.radius_pupil_iris_test[pup.image_processing_test]
-            pup.region_iris = data[1]
-        
-        if pup.region_iris is not None:
-            st.markdown(':pushpin: Íris segmentada')
+        if st.checkbox('Mostrar imagem com íris segmentada'):
+            # Teste
+            if pup.test_mode:
+                data = pup.radius_pupil_iris_test[pup.image_processing_test]
+                pup.region_iris = data[1]
+            
+            if pup.region_iris is not None:
+                st.markdown(':pushpin: Íris segmentada')
 
-            pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
-            pup.show_image(pup.image_iris)
-            st.pyplot()
+                pup.image_iris = pup.draw_circle_perimeter(image=pup.image_pre_processed.copy(), region=pup.region_iris)
+                pup.show_image(pup.image_iris)
+                st.pyplot()
 
-            st.text('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_iris))
-            st.success(f'Íris encontrada em ({pup.region_iris[0]}, {pup.region_iris[1]}) com raio de {pup.region_iris[2]} pixels.')
+                st.text('Bounding box (min_row, min_col, max_row, max_col): ' + str(pup.bbox_iris))
+                st.success(f'Íris encontrada em ({pup.region_iris[0]}, {pup.region_iris[1]}) com raio de {pup.region_iris[2]} pixels.')
 
-        else:
-            st.warning('A região da íris não foi encontrada na imagem.')
-            pup.image_iris = None
+            else:
+                st.warning('A região da íris não foi encontrada na imagem.')
+                pup.image_iris = None
    
 
 @st.cache(suppress_st_warning=True)
