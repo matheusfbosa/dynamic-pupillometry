@@ -17,7 +17,7 @@
 * [Demonstração do modo de execução completo](docs/modo_completo_pupilometria.mp4)
 * [Demonstração do modo de execução de configuração](docs/modo_configuracao_pupilometria.mp4)
 
-## Executar aplicação
+## Executando a aplicação
 
 Inicialmente é necessário instalar as dependências:
 
