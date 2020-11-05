@@ -1,0 +1,70 @@
+import argparse
+import os
+import csv
+
+from frame_segmentation import segmentation
+
+'''
+Estrutura de diretórios:
+-> Scripts
+-> DATASET
+    -> 1
+    -> 2
+        -> 2_1
+        -> 2_2
+            -> frame_0000.jpg
+            -> frame_0001.jpg
+            ...
+            -> frame_0149.jpg
+'''
+
+def create_results_file():
+     with open('results.csv', mode='w+', newline='\n') as results_file:
+        results_writer = csv.writer(results_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        results_writer.writerow(['id_patient', 'row_center', 'col_center', 'radius_pupil', 'radius_iris'])
+
+def write_results(row, col, radius_pupil, radius_iris, pacient):
+    with open('results.csv', mode='a', newline='\n') as results_file:
+        results_writer = csv.writer(results_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        results_writer.writerow([pacient, row, col, radius_pupil, radius_iris])
+
+def pupillometry_all():
+    parser = argparse.ArgumentParser(description='Script de segmentação de íris e pupila')
+    parser.add_argument('-f', '--folder', default='..', type=str, help='Nome da pasta contendo dataset e pasta com scripts')
+
+    args = parser.parse_args()
+    folder = args.folder
+
+    # Percorre todas as pastas dos pacientes
+    for i in range(1, 50):
+        # Acessa pasta de um paciente
+        path = os.path.join(folder, 'DATASET', str(i))
+        
+        for dirpath, dirnames, filenames in os.walk(path):
+            # Filtra pelo tamanho do nome das pastas para não pegar anotações
+            dirnames = list(filter(lambda x: len(x) < 5, dirnames))
+            
+            # Acessa subpasta do paciente
+            for dirname in dirnames:
+                # Guarda os nomes dos arquivos de imagem
+                images = [f for f in os.listdir(os.path.join(path, dirname)) if '.jpg' in f]
+                
+                if len(images) > 0:
+                    # Filtra as 150 imagens pegando de 3 em 3, ficando com 50 imagens
+                    indexes = [i*3 for i in range(0, 50)]
+                    images = [images[i] for i in indexes]
+                                    
+                    for img in images:
+                        print(f'Processando frame /{dirname}/{img}...')
+
+                        # Chama script com algoritmo de segmentação da pupila e da íris
+                        row, col, radius_pupil, radius_iris = segmentation(os.path.join(path, dirname, img))
+                        
+                        # Caso não exista, cria arquivo csv com os resultados
+                        if os.path.exists('results.csv'):
+                            write_results(row, col, radius_pupil, radius_iris, pacient=dirname)                            
+                        # Escreve os resultados no arquivo junto com identificador
+                        else:
+                            create_results_file()
+
+pupillometry_all()
