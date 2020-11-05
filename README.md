@@ -1,6 +1,8 @@
-# Sistema de Detecção Automática de Raio da Pupila e da Íris para Pupilometria Dinâmica
+# Pupilometria Dinâmica
 
-### Trabalho de Conclusão de Curso - Engenharia Elétrica UFPR 2020/1
+### Sistema de Detecção Automática de Raio da Pupila e da Íris para Pupilometria Dinâmica
+
+Trabalho de Conclusão de Curso - Engenharia Elétrica UFPR 2020/1
 
 ![Pupilometria](docs/pupillometry.png?raw=true "Pupilometria")
 
