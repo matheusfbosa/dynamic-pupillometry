@@ -15,6 +15,7 @@ Trabalho de Conclusão de Curso - Engenharia Elétrica UFPR 2020/1
 
 ## Links
 
+* [Documento TCC](docs/tcc_matheus_bosa.pdf)
 * [Aplicação publicada no Heroku](https://pupilometria.herokuapp.com/)
 * [Demonstração do modo de execução completo](docs/modo_completo_pupilometria.mp4)
 * [Demonstração do modo de execução de configuração](docs/modo_configuracao_pupilometria.mp4)
