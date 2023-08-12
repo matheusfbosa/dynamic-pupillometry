@@ -9,7 +9,7 @@ blinker==1.4
 boto3==1.13.6
 botocore==1.16.6
 cachetools==4.1.0
-certifi==2020.4.5.1
+certifi==2022.12.7
 chardet==3.0.4
 click==7.1.2
 cycler==0.10.0
@@ -24,7 +24,7 @@ imagecodecs==2020.2.18
 ImageHash==4.1.0
 imageio==2.8.0
 ipykernel==5.2.1
-ipython==7.14.0
+ipython==8.10.0
 ipython-genutils==0.2.0
 ipywidgets==7.5.1
 jedi==0.17.0
@@ -42,7 +42,7 @@ more-itertools==8.3.0
 nbconvert==5.6.1
 nbformat==5.0.6
 networkx==2.4
-notebook==6.0.3
+notebook==6.4.12
 numpy==1.22.0
 packaging==20.3
 pandas==1.0.3
@@ -60,7 +60,7 @@ protobuf==3.11.3
 ptyprocess==0.6.0
 py==1.8.1
 pydeck==0.3.1
-Pygments==2.6.1
+Pygments==2.15.0
 pyparsing==2.4.7
 pyrsistent==0.16.0
 pytest==5.4.2
@@ -68,10 +68,10 @@ python-dateutil==2.8.1
 pytz==2020.1
 PyWavelets==1.1.1
 pyzmq==19.0.1
-requests==2.23.0
+requests==2.31.0
 s3transfer==0.3.3
 scikit-image==0.17.1
-scipy==1.4.1
+scipy==1.10.0
 seaborn==0.10.1
 Send2Trash==1.5.0
 six==1.14.0
@@ -81,7 +81,7 @@ testpath==0.4.4
 tifffile==2020.5.7
 toml==0.10.0
 toolz==0.10.0
-tornado==5.1.1
+tornado==6.3.2
 traitlets==4.3.3
 tzlocal==2.1
 urllib3==1.25.9
